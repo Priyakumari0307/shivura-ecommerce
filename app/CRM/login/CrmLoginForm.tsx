@@ -99,9 +99,11 @@ export default function CrmLoginForm() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setErrorMessage(
-          data.error || "Invalid administrator email or password"
-        );
+        const message =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message || "Invalid administrator email or password";
+        setErrorMessage(message);
         setIsSubmitting(false);
         return;
       }

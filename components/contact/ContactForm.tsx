@@ -82,7 +82,11 @@ export function ContactForm() {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
-        setErrorMessage(data.error || "Unable to submit inquiry. Please try again.");
+        const errorText =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message || "Unable to submit inquiry. Please try again.";
+        setErrorMessage(errorText);
         setStatus("idle");
         return;
       }

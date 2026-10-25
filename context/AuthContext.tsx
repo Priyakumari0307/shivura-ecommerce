@@ -116,9 +116,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
+        const errorText =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message || "Invalid email or password";
         return {
           success: false,
-          error: data.error || "Invalid email or password",
+          error: errorText,
         };
       }
 
@@ -150,9 +154,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       const data = await response.json();
 
       if (!response.ok || !data.success) {
+        const errorText =
+          typeof data.error === "string"
+            ? data.error
+            : data.error?.message || "Failed to create account";
         return {
           success: false,
-          error: data.error || "Failed to create account",
+          error: errorText,
         };
       }
 

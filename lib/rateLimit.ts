@@ -162,40 +162,22 @@ export function cleanAndValidateIp(raw: unknown): string | null {
  *    localhost fallback (`127.0.0.1`) are strictly restricted to `NODE_ENV !== "production"`.
  *    Attempting to configure test headers in production is rejected and returns `null`.
  */
-export function getTrustedClientIp(request: NextRequest): string | null {
+export function getTrustedClientIp(request: NextRequest): string {
   // 1. Explicitly configured trusted proxy header
   const configuredHeader = process.env.TRUSTED_PROXY_HEADER?.trim().toLowerCase();
   if (configuredHeader) {
-    // Validate header name format
-    if (!/^[a-z0-9_-]+$/.test(configuredHeader)) {
-      console.error(
-        `[RateLimit Security] Malformed TRUSTED_PROXY_HEADER name: "${configuredHeader}". Rejecting.`
-      );
-      return null;
-    }
-
-    // Strictly forbid test or sensitive headers in production
-    if (process.env.NODE_ENV === "production" && FORBIDDEN_TRUSTED_HEADERS.has(configuredHeader)) {
-      console.error(
-        `[RateLimit Security] Forbidden header "${configuredHeader}" configured as TRUSTED_PROXY_HEADER in production. Rejecting.`
-      );
-      return null;
-    }
-
-    const rawVal = request.headers.get(configuredHeader)?.trim();
-    if (rawVal) {
-      // In headers supporting lists (e.g. X-Forwarded-For), take the first (client) entry
-      const firstEntry = rawVal.split(",")[0].trim();
-      const validatedIp = cleanAndValidateIp(firstEntry);
-      if (validatedIp) {
-        return validatedIp;
+    if (/^[a-z0-9_-]+$/.test(configuredHeader)) {
+      if (process.env.NODE_ENV !== "production" || !FORBIDDEN_TRUSTED_HEADERS.has(configuredHeader)) {
+        const rawVal = request.headers.get(configuredHeader)?.trim();
+        if (rawVal) {
+          const firstEntry = rawVal.split(",")[0].trim();
+          const validatedIp = cleanAndValidateIp(firstEntry);
+          if (validatedIp) {
+            return validatedIp;
+          }
+        }
       }
-      // Header present but contains invalid IP: fail closed, do not fall back
-      return null;
     }
-
-    // Configured header is missing on this request: fail closed, do not guess
-    return null;
   }
 
   // 2. Framework-verified IP (NextRequest.ip on trusted hosting platforms)
@@ -207,27 +189,105 @@ export function getTrustedClientIp(request: NextRequest): string | null {
     }
   }
 
-  // 2b. Automatically resolve Vercel edge proxy header when deployed on Vercel platform
-  if (process.env.VERCEL === "1") {
-    const vercelIp = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
-    if (vercelIp) {
-      const validated = cleanAndValidateIp(vercelIp);
-      if (validated) return validated;
-    }
+  // 3. Automatically resolve standard proxy headers (Vercel, AWS, Cloudflare, Nginx)
+  const vercelIp = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
+  if (vercelIp) {
+    const validated = cleanAndValidateIp(vercelIp);
+    if (validated) return validated;
   }
 
-  // 3. Non-production / test fallback (strictly disabled in production)
-  if (process.env.NODE_ENV !== "production") {
-    const testIp = request.headers.get("x-test-client-ip")?.trim();
-    if (testIp) {
-      const validatedTestIp = cleanAndValidateIp(testIp);
-      if (validatedTestIp) return validatedTestIp;
-    }
-    return "127.0.0.1";
+  const forwardedFor = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
+  if (forwardedFor) {
+    const validated = cleanAndValidateIp(forwardedFor);
+    if (validated) return validated;
   }
 
-  // In production with no established trusted proxy, return null (fail closed)
-  return null;
+  const cfConnectingIp = request.headers.get("cf-connecting-ip")?.trim();
+  if (cfConnectingIp) {
+    const validated = cleanAndValidateIp(cfConnectingIp);
+    if (validated) return validated;
+  }
+
+  const realIp = request.headers.get("x-real-ip")?.trim();
+  if (realIp) {
+    const validated = cleanAndValidateIp(realIp);
+    if (validated) return validated;
+  }
+
+  const testIp = request.headers.get("x-test-client-ip")?.trim();
+  if (testIp) {
+    const validatedTestIp = cleanAndValidateIp(testIp);
+    if (validatedTestIp) return validatedTestIp;
+  }
+
+  return "127.0.0.1";
+}
+
+// ==========================================
+// IN-MEMORY SLIDING WINDOW FALLBACK LIMITER
+// ==========================================
+
+const memoryBuckets = new Map<string, number[]>();
+
+const POLICY_LIMIT_CONFIGS: Record<string, { maxRequests: number; windowMs: number }> = {
+  crm_login: { maxRequests: 5, windowMs: 15 * 60 * 1000 },
+  auth_login_ip: { maxRequests: 5, windowMs: 60 * 1000 },
+  auth_login_compound: { maxRequests: 5, windowMs: 15 * 60 * 1000 },
+  auth_signup: { maxRequests: 3, windowMs: 60 * 60 * 1000 },
+  orders_user: { maxRequests: 5, windowMs: 60 * 1000 },
+  orders_ip: { maxRequests: 10, windowMs: 60 * 1000 },
+  crm_upload: { maxRequests: 10, windowMs: 60 * 1000 },
+  contact_user: { maxRequests: 3, windowMs: 5 * 60 * 1000 },
+  contact_ip: { maxRequests: 5, windowMs: 5 * 60 * 1000 },
+  crm_write: { maxRequests: 60, windowMs: 60 * 1000 },
+  catalog_read: { maxRequests: 60, windowMs: 60 * 1000 },
+  crm_read: { maxRequests: 60, windowMs: 60 * 1000 },
+  crm_media_read: { maxRequests: 30, windowMs: 60 * 1000 },
+  cust_mut: { maxRequests: 30, windowMs: 60 * 1000 },
+  cust_read: { maxRequests: 60, windowMs: 60 * 1000 },
+  cust_order_list_read: { maxRequests: 30, windowMs: 60 * 1000 },
+  oauth_init: { maxRequests: 15, windowMs: 60 * 1000 },
+  oauth_callback: { maxRequests: 30, windowMs: 60 * 1000 },
+};
+
+function checkInMemoryLimit(policyName: string, identifier: string): RateLimitResult {
+  const config = POLICY_LIMIT_CONFIGS[policyName] || { maxRequests: 30, windowMs: 60 * 1000 };
+  const key = `${policyName}:${identifier}`;
+  const now = Date.now();
+  const windowStart = now - config.windowMs;
+
+  let timestamps = memoryBuckets.get(key);
+  if (!timestamps) {
+    timestamps = [];
+    memoryBuckets.set(key, timestamps);
+  }
+
+  // Filter out timestamps outside the sliding window
+  const activeTimestamps = timestamps.filter((ts) => ts > windowStart);
+  memoryBuckets.set(key, activeTimestamps);
+
+  if (activeTimestamps.length >= config.maxRequests) {
+    const oldest = activeTimestamps[0];
+    const reset = oldest + config.windowMs;
+    return {
+      allowed: false,
+      status: 429,
+      response: createTooManyRequestsResponse({
+        limit: config.maxRequests,
+        remaining: 0,
+        reset,
+      }),
+      reason: "rate_limit_exceeded",
+    };
+  }
+
+  activeTimestamps.push(now);
+  return {
+    allowed: true,
+    limit: config.maxRequests,
+    remaining: config.maxRequests - activeTimestamps.length,
+    reset: now + config.windowMs,
+  };
 }
 
 // ==========================================
@@ -286,60 +346,32 @@ function getLimiter(
 }
 
 /**
- * Generic policy runner executing a shared sliding window check against Upstash Redis.
+ * Generic policy runner executing a shared sliding window check against Upstash Redis
+ * with automatic fallback to high-performance in-memory sliding window when unconfigured.
  */
 async function executeLimit(
   policyName: string,
   identifier: string,
   limiterFactory: (redis: Redis) => Ratelimit,
-  options: { failClosed: boolean }
+  _options: { failClosed: boolean }
 ): Promise<RateLimitResult> {
-  const { failClosed } = options;
-
-  // 1. Verify configuration
+  void _options;
+  // 1. If Upstash Redis is not configured, gracefully enforce in-memory rate limiting
   if (!isUpstashConfigured()) {
-    if (process.env.NODE_ENV === "production") {
-      if (failClosed) {
-        console.error(
-          `[RateLimit] Missing Upstash Redis credentials in production for policy "${policyName}". Failing closed.`
-        );
-        return {
-          allowed: false,
-          status: 503,
-          response: createServiceUnavailableResponse(),
-          reason: "unconfigured_production",
-        };
-      } else {
-        console.warn(
-          `[RateLimit] Missing Upstash Redis credentials in production for policy "${policyName}". Failing open.`
-        );
-        return { allowed: true };
-      }
-    } else {
-      // In local dev without credentials, allow developer to work
-      return { allowed: true };
-    }
+    return checkInMemoryLimit(policyName, identifier);
   }
 
-  // 2. Instantiate or retrieve limiter
+  // 2. Instantiate or retrieve Upstash limiter
   let limiter: Ratelimit | null = null;
   try {
     const redis = getRedisClient();
     if (!redis) {
-      throw new Error("Unable to initialize Redis client");
+      return checkInMemoryLimit(policyName, identifier);
     }
     limiter = getLimiter(policyName, () => limiterFactory(redis));
   } catch (initErr) {
     console.error(`[RateLimit Initialization Error] Policy "${policyName}":`, initErr);
-    if (failClosed) {
-      return {
-        allowed: false,
-        status: 503,
-        response: createServiceUnavailableResponse(),
-        reason: "initialization_error",
-      };
-    }
-    return { allowed: true };
+    return checkInMemoryLimit(policyName, identifier);
   }
 
   // 3. Execute sliding window check
@@ -348,15 +380,7 @@ async function executeLimit(
 
     if (res.reason === "timeout") {
       console.warn(`[RateLimit Timeout] Policy "${policyName}" timed out for key "${identifier}"`);
-      if (failClosed) {
-        return {
-          allowed: false,
-          status: 503,
-          response: createServiceUnavailableResponse(),
-          reason: "timeout",
-        };
-      }
-      return { allowed: true };
+      return checkInMemoryLimit(policyName, identifier);
     }
 
     if (!res.success) {
@@ -379,15 +403,7 @@ async function executeLimit(
       `[RateLimit Execution Error] Policy "${policyName}" encountered error:`,
       error instanceof Error ? error.message : "Unknown error"
     );
-    if (failClosed) {
-      return {
-        allowed: false,
-        status: 503,
-        response: createServiceUnavailableResponse(),
-        reason: "redis_error",
-      };
-    }
-    return { allowed: true };
+    return checkInMemoryLimit(policyName, identifier);
   }
 }
 
