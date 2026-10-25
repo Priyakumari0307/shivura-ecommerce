@@ -15,8 +15,30 @@ export default async function CrmDashboardPage() {
   const auth = await verifyAdminSession();
   const adminName = auth.admin?.name || auth.admin?.email || "Administrator";
 
-  // Server-side database analytics fetch
-  const analyticsData = await getCrmCatalogAnalytics();
+  // Server-side database analytics fetch with graceful fallback
+  let analyticsData;
+  try {
+    analyticsData = await getCrmCatalogAnalytics();
+  } catch (error) {
+    console.error("[CRM Dashboard] Could not connect to database for analytics:", error);
+    analyticsData = {
+      metrics: {
+        total: 0,
+        published: 0,
+        draft: 0,
+        active: 0,
+        archived: 0,
+        inStock: 0,
+        lowStock: 0,
+        outOfStock: 0,
+        stockAlertsTotal: 0,
+      },
+      categories: [],
+      occasions: [],
+      recentProducts: [],
+      generatedAt: new Date().toISOString(),
+    };
+  }
 
   return (
     <CrmDashboardOverview

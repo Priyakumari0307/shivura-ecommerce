@@ -207,6 +207,15 @@ export function getTrustedClientIp(request: NextRequest): string | null {
     }
   }
 
+  // 2b. Automatically resolve Vercel edge proxy header when deployed on Vercel platform
+  if (process.env.VERCEL === "1") {
+    const vercelIp = request.headers.get("x-vercel-forwarded-for")?.split(",")[0]?.trim();
+    if (vercelIp) {
+      const validated = cleanAndValidateIp(vercelIp);
+      if (validated) return validated;
+    }
+  }
+
   // 3. Non-production / test fallback (strictly disabled in production)
   if (process.env.NODE_ENV !== "production") {
     const testIp = request.headers.get("x-test-client-ip")?.trim();
