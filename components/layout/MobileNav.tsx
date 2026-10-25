@@ -6,6 +6,7 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { NAV_ITEMS } from "@/lib/constants";
 import { useShop } from "@/context/ShopContext";
+import { useAuth } from "@/context/AuthContext";
 
 interface MobileNavProps {
   isOpen: boolean;
@@ -14,7 +15,8 @@ interface MobileNavProps {
 
 export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const pathname = usePathname();
-  const { wishlistCount, cartCount } = useShop();
+  const { wishlistCount, cartCount, showToast } = useShop();
+  const { user, isAuthenticated, logout } = useAuth();
   const [expandedSubMenu, setExpandedSubMenu] = useState<string | null>("Shop");
 
   // Close mobile drawer on route change
@@ -204,27 +206,79 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
                 </svg>
                 <span>Wishlist ({wishlistCount})</span>
               </Link>
-              <Link
-                href="/login"
-                onClick={onClose}
-                className="flex items-center space-x-2.5 py-2 text-sm text-neutral-700 hover:text-neutral-900 font-medium tracking-wide uppercase"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="18"
-                  height="18"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {isAuthenticated && user ? (
+                <div className="pt-2 border-t border-stone-200 mt-2 space-y-2.5">
+                  <div className="flex items-center space-x-2.5 px-1 py-1">
+                    <div className="w-7 h-7 rounded-full bg-[#1C2820] text-[#FAF5EB] flex items-center justify-center text-xs font-serif font-medium">
+                      {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-medium text-neutral-900 truncate">
+                        {user.name || "Member"}
+                      </p>
+                      <p className="text-[11px] text-neutral-500 truncate font-light">
+                        {user.email}
+                      </p>
+                    </div>
+                  </div>
+                  <Link
+                    href="/account/orders"
+                    onClick={onClose}
+                    className="w-full text-left py-2 px-2 rounded-lg text-xs uppercase tracking-wider text-[#3A2A1E] hover:bg-[#FAF7F2] hover:text-[#B88746] font-medium transition-colors flex items-center justify-between"
+                  >
+                    <span>My Orders</span>
+                    <span className="text-[10px] text-[#B88746]">View →</span>
+                  </Link>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      onClose();
+                      await logout();
+                      showToast("You have been signed out safely.", "info");
+                    }}
+                    className="w-full text-left py-2 px-2 rounded-lg text-xs uppercase tracking-wider text-rose-700 hover:bg-rose-50/70 font-medium transition-colors cursor-pointer flex items-center justify-between"
+                  >
+                    <span>Sign Out</span>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                      <polyline points="16 17 21 12 16 7"></polyline>
+                      <line x1="21" y1="12" x2="9" y2="12"></line>
+                    </svg>
+                  </button>
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  onClick={onClose}
+                  className="flex items-center space-x-2.5 py-2 text-sm text-neutral-700 hover:text-neutral-900 font-medium tracking-wide uppercase"
                 >
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-                <span>Account Login / Sign Up</span>
-              </Link>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="18"
+                    height="18"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                  <span>Account Login / Sign Up</span>
+                </Link>
+              )}
             </div>
           </nav>
         </div>

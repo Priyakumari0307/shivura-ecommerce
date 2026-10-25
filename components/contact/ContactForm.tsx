@@ -1,8 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useAuth } from "@/context/AuthContext";
 
 export function ContactForm() {
+  const { user, isAuthenticated, requireAuth, consumePendingAction } = useAuth();
+
   const [formData, setFormData] = useState({
     name: "",
     phone: "",
@@ -13,6 +16,31 @@ export function ContactForm() {
 
   const [status, setStatus] = useState<"idle" | "submitting" | "success">("idle");
   const [errorMessage, setErrorMessage] = useState("");
+  const [restoredNotice, setRestoredNotice] = useState(false);
+
+  // Restore pending draft or pre-fill with authenticated user details
+  useEffect(() => {
+    queueMicrotask(() => {
+      const pending = consumePendingAction();
+      if (pending && pending.type === "SUBMIT_ENQUIRY" && pending.payload?.formData) {
+        const draft = pending.payload.formData as Partial<typeof formData>;
+        setFormData((prev) => ({
+          ...prev,
+          ...draft,
+        }));
+        setRestoredNotice(true);
+        return;
+      }
+
+      if (user) {
+        setFormData((prev) => ({
+          ...prev,
+          name: prev.name || user.name || "",
+          email: prev.email || user.email || "",
+        }));
+      }
+    });
+  }, [user, consumePendingAction]);
 
   const handleChange = (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement | HTMLSelectElement>
@@ -23,20 +51,47 @@ export function ContactForm() {
     }));
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!formData.name || !formData.email || !formData.message) {
       setErrorMessage("Please fill in all required fields.");
       return;
     }
 
+    // Enforce authentication before submitting protected enquiry
+    if (!isAuthenticated) {
+      requireAuth({
+        type: "SUBMIT_ENQUIRY",
+        payload: { formData },
+        returnUrl: "/contact",
+        reason: "contact",
+      });
+      return;
+    }
+
     setErrorMessage("");
     setStatus("submitting");
 
-    // Simulate luxury submission experience
-    setTimeout(() => {
+    try {
+      const response = await fetch("/api/contact", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(formData),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok || !data.success) {
+        setErrorMessage(data.error || "Unable to submit inquiry. Please try again.");
+        setStatus("idle");
+        return;
+      }
+
       setStatus("success");
-    }, 900);
+    } catch {
+      setErrorMessage("Network error occurred. Please try again later.");
+      setStatus("idle");
+    }
   };
 
   const handleReset = () => {
@@ -114,6 +169,13 @@ export function ContactForm() {
               Fill out the details below and an artisanal specialist will be in touch shortly.
             </p>
           </div>
+
+          {restoredNotice && (
+            <div className="p-3 rounded-xl bg-emerald-50/80 border border-emerald-200 text-emerald-800 text-xs font-sans flex items-center space-x-2">
+              <span>✦</span>
+              <span>Welcome back! Your inquiry draft has been restored. Click send when ready.</span>
+            </div>
+          )}
 
           {errorMessage && (
             <div className="p-3 rounded-lg bg-rose-50 border border-rose-200 text-rose-700 text-xs font-sans">

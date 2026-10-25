@@ -3,18 +3,31 @@ import Image from "next/image";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 
-export function HeroPlaceholder() {
+export interface HeroProps {
+  heroImage?: {
+    imageUrl?: string | null;
+    altText?: string | null;
+    badgeText?: string | null;
+  } | null;
+}
+
+export function HeroPlaceholder({ heroImage }: HeroProps = {}) {
+  const imageUrl = heroImage?.imageUrl || "/images/background.png";
+  const altText = heroImage?.altText || "Shivura Home Decoration";
+  const badgeText = heroImage?.badgeText || "New Collection 2026";
+
   return (
     <section className="relative min-h-[500px] sm:min-h-[580px] lg:min-h-[640px] flex items-center overflow-hidden border-b border-stone-200/70">
       {/* Background Image */}
       <div className="absolute inset-0 -z-10">
         <Image
-          src="/images/background.png"
-          alt="Shivura Home Decoration"
+          src={imageUrl}
+          alt={altText}
           fill
           priority
           sizes="100vw"
           className="object-cover object-center"
+          unoptimized={imageUrl.startsWith("http://") || (imageUrl.startsWith("https://") && !imageUrl.includes("res.cloudinary.com"))}
         />
         {/* Soft subtle tint for button contrast */}
         <div className="absolute inset-0 bg-stone-900/[0.04]" />
@@ -25,7 +38,7 @@ export function HeroPlaceholder() {
           {/* Badge */}
           <div className="inline-flex items-center space-x-2 px-4 py-1.5 bg-white/90 backdrop-blur-md rounded-full text-[11px] uppercase tracking-[0.2em] text-neutral-800 font-sans font-medium border border-stone-300/70 shadow-xs mb-8">
             <span className="w-1.5 h-1.5 rounded-full bg-neutral-900 animate-pulse" />
-            <span>New Collection 2026</span>
+            <span>{badgeText}</span>
           </div>
 
           <h1 className="sr-only">Shivura — Handcrafted Luxury Lifestyle</h1>

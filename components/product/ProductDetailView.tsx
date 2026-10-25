@@ -1,15 +1,16 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useMemo, useCallback } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Product } from "@/types";
-import { ALL_PRODUCTS } from "@/lib/constants";
 import { Container } from "@/components/ui/Container";
 import { useShop } from "@/context/ShopContext";
 
 interface ProductDetailViewProps {
-  product: Product;
+  product?: Product;
+  slug?: string;
+  initialProduct?: Product;
 }
 
 interface Review {
@@ -19,6 +20,92 @@ interface Review {
   date: string;
   comment: string;
   verified: boolean;
+}
+
+interface ApiVariant {
+  id: string;
+  name: string | null;
+  size: string | null;
+  color: string | null;
+  design: string | null;
+  sku: string | null;
+  price: number | null;
+  stock: number;
+  active: boolean;
+}
+
+interface ApiCategory {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface ApiOccasion {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+interface ApiReview {
+  id: string;
+  author: string;
+  rating: number;
+  comment: string;
+  verified: boolean;
+  date: string;
+  createdAt: string;
+}
+
+interface ApiRelatedProduct {
+  id: string;
+  name: string;
+  slug: string;
+  href: string;
+  price: number;
+  originalPrice: number | null;
+  pricePrefix: string | null;
+  rating: number;
+  reviewCount: number;
+  badge: string | null;
+  isNew: boolean;
+  imageSrc: string | null;
+}
+
+interface ApiProductDetail {
+  id: string;
+  name: string;
+  slug: string;
+  href: string;
+  description: string | null;
+  shortDescription: string | null;
+  price: number;
+  originalPrice: number | null;
+  pricePrefix: string | null;
+  sku: string | null;
+  stock: number;
+  rating: number;
+  reviewCount: number;
+  badge: string | null;
+  isNew: boolean;
+  imageSrc: string | null;
+  primaryImage: {
+    id: string;
+    url: string;
+    altText?: string | null;
+    isPrimary?: boolean;
+  } | null;
+  images: {
+    id: string;
+    url: string;
+    altText?: string | null;
+    isPrimary?: boolean;
+    sortOrder?: number;
+  }[];
+  variants: ApiVariant[];
+  categories: ApiCategory[];
+  occasions: ApiOccasion[];
+  reviews: ApiReview[];
+  relatedProducts: ApiRelatedProduct[];
 }
 
 interface ProductSpecificationData {
@@ -263,51 +350,191 @@ function getProductSpecifications(product: Product): ProductSpecificationData {
   };
 }
 
-export function ProductDetailView({ product }: ProductDetailViewProps) {
+export function ProductDetailView({
+  product,
+  slug,
+  initialProduct,
+}: ProductDetailViewProps) {
+  const initial = product || initialProduct;
+  const effectiveSlug =
+    slug ||
+    initial?.slug ||
+    initial?.id ||
+    (initial?.href ? initial.href.replace("/shop/", "") : "");
+
+  const [apiData, setApiData] = useState<ApiProductDetail | null>(null);
+  const [isLoading, setIsLoading] = useState<boolean>(!initial);
+  const [isNotFound, setIsNotFound] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+  const [reviews, setReviews] = useState<Review[]>([]);
+
   const { isWishlisted, toggleWishlist, addToCart } = useShop();
-  const isLiked = isWishlisted(product.id);
+
+  // Fetch product details from GET /api/products/[slug]
+  const fetchProduct = useCallback(() => {
+    if (!effectiveSlug) return;
+    if (!initial) {
+      setIsLoading(true);
+    }
+    setError(null);
+    setIsNotFound(false);
+
+    fetch(`/api/products/${encodeURIComponent(effectiveSlug)}`)
+      .then(async (res) => {
+        if (res.status === 404) {
+          setIsNotFound(true);
+          setIsLoading(false);
+          return null;
+        }
+        if (!res.ok) {
+          throw new Error("Failed to fetch product details");
+        }
+        return res.json();
+      })
+      .then((json) => {
+        if (!json) return;
+        if (json.success && json.data) {
+          setApiData(json.data);
+          if (Array.isArray(json.data.reviews)) {
+            setReviews(
+              json.data.reviews.map((r: ApiReview) => ({
+                id: r.id,
+                author: r.author,
+                rating: r.rating,
+                date: r.date || (r.createdAt ? r.createdAt.split("T")[0] : ""),
+                comment: r.comment,
+                verified: r.verified ?? true,
+              }))
+            );
+          }
+        } else {
+          if (!initial) {
+            setIsNotFound(true);
+          }
+        }
+        setIsLoading(false);
+      })
+      .catch((err) => {
+        console.error("Error fetching product detail:", err);
+        if (!initial) {
+          setError("Unable to load product details. Please try again.");
+        }
+        setIsLoading(false);
+      });
+  }, [effectiveSlug, initial]);
+
+  useEffect(() => {
+    let ignore = false;
+    void (async () => {
+      await Promise.resolve();
+      if (!ignore) {
+        fetchProduct();
+      }
+    })();
+    return () => {
+      ignore = true;
+    };
+  }, [fetchProduct]);
+
+  // Merge API data with initial product
+  const activeProduct: Product | null = useMemo(() => {
+    if (apiData) {
+      const primaryCat = apiData.categories[0]?.slug || initial?.category || "";
+      const categorySlugs = apiData.categories.map((c) => c.slug);
+      return {
+        id: apiData.id,
+        name: apiData.name,
+        href: apiData.href || `/shop/${apiData.slug}`,
+        imageSrc:
+          apiData.imageSrc ||
+          apiData.primaryImage?.url ||
+          initial?.imageSrc ||
+          "/images/Product1.png",
+        slug: apiData.slug,
+        description: apiData.description ?? initial?.description,
+        shortDescription: apiData.shortDescription ?? initial?.shortDescription,
+        price: Number(apiData.price),
+        originalPrice: apiData.originalPrice
+          ? Number(apiData.originalPrice)
+          : (initial?.originalPrice ?? undefined),
+        pricePrefix: apiData.pricePrefix || initial?.pricePrefix,
+        sku: apiData.sku || initial?.sku,
+        stock: apiData.stock ?? initial?.stock,
+        rating: apiData.rating ?? initial?.rating,
+        reviewCount: apiData.reviewCount ?? initial?.reviewCount,
+        isNew: apiData.isNew ?? initial?.isNew,
+        badge: apiData.badge || initial?.badge,
+        category: primaryCat,
+        categories: categorySlugs,
+        primaryImage: apiData.primaryImage,
+        images: apiData.images,
+        occasions: apiData.occasions,
+      };
+    }
+    return initial || null;
+  }, [apiData, initial]);
+
+  const isLiked = activeProduct ? isWishlisted(activeProduct.id) : false;
 
   // Specifications
-  const specs = getProductSpecifications(product);
+  const specs = useMemo(() => {
+    return activeProduct ? getProductSpecifications(activeProduct) : null;
+  }, [activeProduct]);
 
-  // Gallery state
-  const galleryImages = [
-    product.imageSrc,
-    product.imageSrc,
-    product.imageSrc,
-    product.imageSrc,
-  ];
+  // Gallery images from API or active product
+  const galleryImages = useMemo(() => {
+    if (apiData?.images && apiData.images.length > 0) {
+      const urls = apiData.images.map((img) => img.url);
+      if (urls.length === 1) {
+        return [urls[0], urls[0], urls[0], urls[0]];
+      }
+      return urls;
+    }
+    if (activeProduct?.imageSrc) {
+      return [
+        activeProduct.imageSrc,
+        activeProduct.imageSrc,
+        activeProduct.imageSrc,
+        activeProduct.imageSrc,
+      ];
+    }
+    return [
+      "/images/Product1.png",
+      "/images/Product1.png",
+      "/images/Product1.png",
+      "/images/Product1.png",
+    ];
+  }, [apiData, activeProduct]);
+
   const [selectedImageIndex, setSelectedImageIndex] = useState(0);
+  const safeImageIndex =
+    selectedImageIndex < galleryImages.length ? selectedImageIndex : 0;
 
   // Variant & Quantity state
+  const variants = useMemo(() => apiData?.variants || [], [apiData?.variants]);
   const [selectedPack, setSelectedPack] = useState("1");
   const [quantity, setQuantity] = useState(1);
   const [isAdding, setIsAdding] = useState(false);
 
+  // Sync selectedPack if variants are returned by the API
+  useEffect(() => {
+    if (variants.length > 0 && !variants.some((v) => v.id === selectedPack)) {
+      queueMicrotask(() => {
+        setSelectedPack(variants[0].id);
+      });
+    }
+  }, [variants, selectedPack]);
+
+  // Selected variant attributes
+  const selectedVariant = variants.find((v) => v.id === selectedPack);
+  const currentPrice = selectedVariant?.price ?? (activeProduct?.price || 0);
+  const currentOriginalPrice =
+    activeProduct?.originalPrice || Math.round(currentPrice * 1.35);
+  const currentStock = selectedVariant?.stock ?? activeProduct?.stock ?? 10;
+  const currentSku = selectedVariant?.sku ?? activeProduct?.sku;
+
   // Accordion state
   const [openAccordion, setOpenAccordion] = useState<string | null>("shipping");
-
-  // Reviews state
-  const [reviews, setReviews] = useState<Review[]>([
-    {
-      id: "1",
-      author: "Tanya Sharma",
-      rating: 5,
-      date: "2026-08-17",
-      comment:
-        "Quality is truly exceptional. Looks way more premium in person than pictures! Delivered safely in beautiful packaging.",
-      verified: true,
-    },
-    {
-      id: "2",
-      author: "Rohan Mukherjee",
-      rating: 5,
-      date: "2026-09-02",
-      comment:
-        "Exquisite craftsmanship and refined aesthetics. Adds an instant warm luxury feel to our living room.",
-      verified: true,
-    },
-  ]);
 
   // Review modal state
   const [showReviewModal, setShowReviewModal] = useState(false);
@@ -320,12 +547,15 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
   };
 
   const handlePrevImage = () => {
-    setSelectedImageIndex((prev) => (prev - 1 + galleryImages.length) % galleryImages.length);
+    setSelectedImageIndex(
+      (prev) => (prev - 1 + galleryImages.length) % galleryImages.length
+    );
   };
 
   const handleAddToCart = () => {
+    if (!activeProduct) return;
     setIsAdding(true);
-    addToCart(product, quantity);
+    addToCart(activeProduct, quantity);
     setTimeout(() => setIsAdding(false), 1200);
   };
 
@@ -351,12 +581,136 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
     setShowReviewModal(false);
   };
 
-  // Related products
-  const relatedProducts = ALL_PRODUCTS.filter(
-    (p) => p.id !== product.id && (p.category === product.category || p.badge === "Bestseller")
-  ).slice(0, 4);
+  // Related products from API
+  const relatedProducts: Product[] = useMemo(() => {
+    if (apiData?.relatedProducts && apiData.relatedProducts.length > 0) {
+      return apiData.relatedProducts.map((rel) => ({
+        id: rel.id,
+        name: rel.name,
+        slug: rel.slug,
+        href: rel.href || `/shop/${rel.slug}`,
+        price: Number(rel.price),
+        originalPrice: rel.originalPrice ? Number(rel.originalPrice) : undefined,
+        pricePrefix: rel.pricePrefix || undefined,
+        rating: rel.rating,
+        reviewCount: rel.reviewCount,
+        badge: rel.badge || undefined,
+        isNew: rel.isNew,
+        imageSrc: rel.imageSrc || "/images/Product1.png",
+      }));
+    }
+    return [];
+  }, [apiData]);
 
-  const originalPrice = product.originalPrice || Math.round(product.price * 1.35);
+  // Loading state (only shown if no initial product and waiting for API)
+  if (isLoading && !activeProduct) {
+    return (
+      <div className="bg-[#FAF8F5] py-5 sm:py-8 font-sans antialiased text-[#2C2117] animate-pulse">
+        <Container size="wide">
+          {/* Breadcrumb Skeleton */}
+          <div className="h-4 bg-[#EFE7DC] rounded w-48 mb-5" />
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-12 items-start">
+            {/* Gallery Skeleton */}
+            <div className="lg:col-span-6 space-y-4">
+              <div className="aspect-square sm:aspect-[4/3] lg:aspect-square w-full rounded-2xl bg-[#EFE7DC] border border-[#DFCBB8]/60" />
+              <div className="flex items-center space-x-2.5">
+                {[...Array(4)].map((_, idx) => (
+                  <div
+                    key={idx}
+                    className="w-16 h-16 sm:w-18 sm:h-18 rounded-xl bg-[#EFE7DC] border border-[#DFCBB8]/60"
+                  />
+                ))}
+              </div>
+            </div>
+
+            {/* Details Skeleton */}
+            <div className="lg:col-span-6 space-y-4">
+              <div className="h-3 bg-[#EFE7DC] rounded w-1/3" />
+              <div className="h-7 bg-[#EFE7DC] rounded w-3/4" />
+              <div className="h-4 bg-[#EFE7DC] rounded w-1/2" />
+              <div className="h-10 bg-[#EFE7DC] rounded-xl w-full" />
+              <div className="h-12 bg-[#EFE7DC] rounded-full w-full" />
+              <div className="h-48 bg-[#EFE7DC] rounded-xl w-full" />
+            </div>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  // Not Found state
+  if (isNotFound) {
+    return (
+      <div className="bg-[#FAF8F5] py-16 sm:py-24 font-sans text-center text-[#2C2117]">
+        <Container size="narrow">
+          <div className="space-y-4 max-w-md mx-auto">
+            <div className="text-[11px] uppercase tracking-[0.2em] text-[#916223] font-semibold">
+              Shivura Heritage
+            </div>
+            <h1 className="font-serif text-2xl sm:text-3xl text-[#2C2117] font-normal">
+              Product Not Found
+            </h1>
+            <p className="text-xs sm:text-sm text-[#7A6655] font-light leading-relaxed">
+              The handcrafted piece you are looking for is no longer available or the link may be incorrect.
+            </p>
+            <div className="pt-4">
+              <Link
+                href="/shop"
+                className="inline-block py-2.5 px-6 rounded-full bg-[#1E2721] hover:bg-[#2F3E34] text-[#FAF6F0] text-xs uppercase tracking-widest font-medium transition-colors"
+              >
+                Explore All Products
+              </Link>
+            </div>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  // Error state
+  if (error && !activeProduct) {
+    return (
+      <div className="bg-[#FAF8F5] py-16 sm:py-24 font-sans text-center text-[#2C2117]">
+        <Container size="narrow">
+          <div className="space-y-4 max-w-md mx-auto">
+            <div className="text-3xl">🪷</div>
+            <h1 className="font-serif text-2xl sm:text-3xl text-[#2C2117] font-normal">
+              Unable to load product
+            </h1>
+            <p className="text-xs sm:text-sm text-[#7A6655] font-light leading-relaxed">
+              {error}
+            </p>
+            <div className="pt-4 flex justify-center space-x-3">
+              <button
+                type="button"
+                onClick={fetchProduct}
+                className="py-2.5 px-6 rounded-full bg-[#1E2721] hover:bg-[#2F3E34] text-[#FAF6F0] text-xs uppercase tracking-widest font-medium transition-colors cursor-pointer"
+              >
+                Try Again
+              </button>
+              <Link
+                href="/shop"
+                className="py-2.5 px-6 rounded-full bg-white border border-[#DFCBB8] hover:bg-[#FAF7F2] text-[#2C2117] text-xs uppercase tracking-widest font-medium transition-colors"
+              >
+                Back to Shop
+              </Link>
+            </div>
+          </div>
+        </Container>
+      </div>
+    );
+  }
+
+  if (!activeProduct || !specs) {
+    return null;
+  }
+
+  const displayRating =
+    activeProduct.rating ||
+    (reviews.length > 0
+      ? reviews.reduce((acc, r) => acc + r.rating, 0) / reviews.length
+      : 5);
 
   return (
     <div className="bg-[#FAF8F5] py-5 sm:py-8 font-sans antialiased text-[#2C2117]">
@@ -376,21 +730,21 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
               </Link>
             </li>
             <li className="text-[#C5B5A5]">/</li>
-            {product.category && (
+            {activeProduct.category && (
               <>
                 <li>
                   <Link
-                    href={`/shop/${product.category}`}
+                    href={`/shop/${activeProduct.category}`}
                     className="hover:text-[#2C2117] capitalize transition-colors"
                   >
-                    {product.category.replace("-", " ")}
+                    {activeProduct.category.replace("-", " ")}
                   </Link>
                 </li>
                 <li className="text-[#C5B5A5]">/</li>
               </>
             )}
             <li className="text-[#2C2117] font-medium truncate max-w-[200px] sm:max-w-md">
-              {product.name}
+              {activeProduct.name}
             </li>
           </ol>
         </nav>
@@ -403,8 +757,8 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
             {/* Main Image Viewport */}
             <div className="relative aspect-square sm:aspect-[4/3] lg:aspect-square w-full rounded-2xl overflow-hidden bg-[#F2ECE4] border border-[#DFCBB8]/70 shadow-2xs group">
               <Image
-                src={galleryImages[selectedImageIndex]}
-                alt={product.name}
+                src={galleryImages[safeImageIndex]}
+                alt={activeProduct.name}
                 fill
                 priority
                 className="object-cover transition-transform duration-500 group-hover:scale-105"
@@ -435,9 +789,9 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
               </button>
 
               {/* Product Badge */}
-              {product.badge && (
+              {activeProduct.badge && (
                 <div className="absolute top-3.5 left-3.5 bg-[#1C2820]/90 backdrop-blur-xs border border-[#C8A060]/30 text-[#FAF5EB] text-[10.5px] font-medium tracking-wide px-2.5 py-0.5 rounded-full shadow-xs">
-                  {product.badge}
+                  {activeProduct.badge}
                 </div>
               )}
             </div>
@@ -450,7 +804,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   type="button"
                   onClick={() => setSelectedImageIndex(idx)}
                   className={`relative w-16 h-16 sm:w-18 sm:h-18 rounded-xl overflow-hidden bg-[#F2ECE4] border transition-all cursor-pointer ${
-                    selectedImageIndex === idx
+                    safeImageIndex === idx
                       ? "border-[#B88746] ring-1 ring-[#B88746] shadow-xs"
                       : "border-[#DFCBB8]/60 hover:border-[#B88746]/50 opacity-75 hover:opacity-100"
                   }`}
@@ -472,7 +826,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
 
               {/* Refined Title: Proportioned & Luxury Scaled */}
               <h1 className="font-serif text-xl sm:text-2xl text-[#2C2117] font-normal leading-snug tracking-tight">
-                {product.name}
+                {activeProduct.name}
               </h1>
 
               {/* Star Rating & Reviews Count */}
@@ -483,7 +837,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                       key={i}
                       xmlns="http://www.w3.org/2000/svg"
                       viewBox="0 0 24 24"
-                      fill={i < Math.floor(product.rating || 5) ? "currentColor" : "none"}
+                      fill={i < Math.floor(displayRating) ? "currentColor" : "none"}
                       stroke="currentColor"
                       strokeWidth="1"
                       className="w-3.5 h-3.5 fill-[#C89438]"
@@ -493,29 +847,42 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   ))}
                 </div>
                 <span className="text-[11.5px] text-[#7A6655] font-light">
-                  {product.rating || 5}.0 ({reviews.length} reviews)
+                  {displayRating.toFixed(1)} ({reviews.length} {reviews.length === 1 ? "review" : "reviews"})
                 </span>
                 <span className="text-[#C5B5A5]">•</span>
-                <span className="text-[11.5px] text-emerald-700 font-medium">In Stock</span>
+                <span className={`text-[11.5px] font-medium ${currentStock > 0 ? "text-emerald-700" : "text-amber-700"}`}>
+                  {currentStock > 0 ? "In Stock" : "Out of Stock"}
+                </span>
+                {currentSku && (
+                  <>
+                    <span className="text-[#C5B5A5]">•</span>
+                    <span className="text-[11px] text-[#8C7A6B] font-mono">SKU: {currentSku}</span>
+                  </>
+                )}
               </div>
 
               {/* Elegant Subtitle / Micro Tagline */}
               <p className="text-xs sm:text-[13px] text-[#7A6655] font-light leading-relaxed pt-0.5">
-                Thoughtfully shaped by master Indian artisans to bring enduring warmth, soul and sophistication to modern homes.
+                {activeProduct.shortDescription ||
+                  "Thoughtfully shaped by master Indian artisans to bring enduring warmth, soul and sophistication to modern homes."}
               </p>
             </div>
 
             {/* Price Row: Refined and Luxury Styled */}
             <div className="flex items-baseline space-x-3 border-y border-[#DFCBB8]/60 py-3">
-              <span className="text-[#8F8175] line-through text-xs sm:text-sm font-light">
-                ₹{originalPrice.toFixed(2)}
-              </span>
+              {currentOriginalPrice > currentPrice && (
+                <span className="text-[#8F8175] line-through text-xs sm:text-sm font-light">
+                  ₹{currentOriginalPrice.toFixed(2)}
+                </span>
+              )}
               <span className="font-medium text-lg sm:text-xl text-[#241A12] tracking-tight">
-                ₹{product.price.toFixed(2)}
+                ₹{currentPrice.toFixed(2)}
               </span>
-              <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50/80 px-2 py-0.5 rounded-full border border-emerald-200">
-                Save ₹{(originalPrice - product.price).toFixed(0)} ({Math.round(((originalPrice - product.price) / originalPrice) * 100)}% OFF)
-              </span>
+              {currentOriginalPrice > currentPrice && (
+                <span className="text-[11px] font-medium text-emerald-700 bg-emerald-50/80 px-2 py-0.5 rounded-full border border-emerald-200">
+                  Save ₹{(currentOriginalPrice - currentPrice).toFixed(0)} ({Math.round(((currentOriginalPrice - currentPrice) / currentOriginalPrice) * 100)}% OFF)
+                </span>
+              )}
             </div>
 
             {/* Pack / Variant Selector */}
@@ -530,9 +897,25 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   onChange={(e) => setSelectedPack(e.target.value)}
                   className="w-full appearance-none bg-white hover:bg-[#FAF7F2] border border-[#DFCBB8] rounded-xl px-3.5 py-2 text-xs text-[#382B1F] focus:outline-none focus:ring-1 focus:ring-[#B88746] shadow-2xs cursor-pointer transition-colors"
                 >
-                  <option value="1">1 Unit (Standard Artisanal Pack)</option>
-                  <option value="2">Pack of 2 (Festive Value Set — Extra 10% Off)</option>
-                  <option value="4">Pack of 4 (Luxury Gifting Hamper Box — Extra 20% Off)</option>
+                  {variants.length > 0 ? (
+                    variants.map((v) => {
+                      const labelParts = [v.name, v.size, v.color, v.design].filter(Boolean);
+                      const label = labelParts.length > 0 ? labelParts.join(" - ") : (v.sku || "Option");
+                      const priceDisplay = v.price ? ` — ₹${v.price.toFixed(2)}` : "";
+                      const stockDisplay = v.stock <= 0 ? " (Out of stock)" : "";
+                      return (
+                        <option key={v.id} value={v.id}>
+                          {label}{priceDisplay}{stockDisplay}
+                        </option>
+                      );
+                    })
+                  ) : (
+                    <>
+                      <option value="1">1 Unit (Standard Artisanal Pack)</option>
+                      <option value="2">Pack of 2 (Festive Value Set — Extra 10% Off)</option>
+                      <option value="4">Pack of 4 (Luxury Gifting Hamper Box — Extra 20% Off)</option>
+                    </>
+                  )}
                 </select>
                 <div className="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-3 text-[#7E6955]">
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -577,8 +960,11 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
               <button
                 type="button"
                 onClick={handleAddToCart}
+                disabled={currentStock <= 0}
                 className={`flex-1 py-3 px-5 rounded-full text-xs uppercase tracking-widest font-medium transition-all duration-200 shadow-xs hover:shadow-md flex items-center justify-center space-x-2 cursor-pointer ${
-                  isAdding
+                  currentStock <= 0
+                    ? "bg-stone-300 text-stone-600 cursor-not-allowed"
+                    : isAdding
                     ? "bg-[#2F3E34] text-[#E6CA65]"
                     : "bg-[#1E2721] hover:bg-[#2F3E34] text-[#FAF6F0]"
                 }`}
@@ -598,12 +984,18 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   <line x1="3" y1="6" x2="21" y2="6"></line>
                   <path d="M16 10a4 4 0 0 1-8 0"></path>
                 </svg>
-                <span>{isAdding ? "Added to Bag! ✓" : "Add to bag"}</span>
+                <span>
+                  {currentStock <= 0
+                    ? "Out of Stock"
+                    : isAdding
+                    ? "Added to Bag! ✓"
+                    : "Add to bag"}
+                </span>
               </button>
 
               <button
                 type="button"
-                onClick={() => toggleWishlist(product)}
+                onClick={() => toggleWishlist(activeProduct)}
                 aria-label={isLiked ? "Remove from wishlist" : "Add to wishlist"}
                 title={isLiked ? "Remove from wishlist" : "Add to wishlist"}
                 className={`p-2.5 rounded-full border transition-all cursor-pointer shadow-2xs ${
@@ -628,7 +1020,7 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
             </div>
 
             {/* ========================================================================= */}
-            {/* COMPACT PRODUCT SPECIFICATIONS CARD (Shifted to Right Column, Non-Bulky) */}
+            {/* COMPACT PRODUCT SPECIFICATIONS CARD */}
             {/* ========================================================================= */}
             <div className="pt-2">
               <div className="bg-white rounded-xl border border-[#DFCBB8]/70 p-4 sm:p-5 shadow-2xs space-y-4">
@@ -745,6 +1137,11 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
                   <h4 className="text-xs font-medium text-[#7E6955] tracking-wide">
                     About the product
                   </h4>
+                  {activeProduct.description && (
+                    <p className="text-[11.5px] text-[#4A392C] font-light leading-relaxed mb-2">
+                      {activeProduct.description}
+                    </p>
+                  )}
                   <ul className="space-y-1.5 text-[11.5px] text-[#4A392C] font-light leading-relaxed">
                     {specs.aboutBullets.map((bullet, idx) => (
                       <li key={idx} className="flex items-start space-x-2">
@@ -926,34 +1323,47 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
           <div className="bg-white border border-[#DFCBB8]/70 rounded-2xl p-5 sm:p-6 shadow-2xs flex flex-col md:flex-row items-start md:items-center justify-between gap-6 mb-6">
             <div className="flex items-center space-x-6">
               <div>
-                <div className="font-serif text-3xl sm:text-4xl text-[#2C2117] font-normal">5.0</div>
+                <div className="font-serif text-3xl sm:text-4xl text-[#2C2117] font-normal">
+                  {displayRating.toFixed(1)}
+                </div>
                 <div className="flex text-[#C89438] space-x-0.5 mt-1">
                   {[...Array(5)].map((_, i) => (
-                    <svg key={i} className="w-3.5 h-3.5 fill-[#C89438]" viewBox="0 0 24 24">
+                    <svg
+                      key={i}
+                      className="w-3.5 h-3.5 fill-[#C89438]"
+                      viewBox="0 0 24 24"
+                    >
                       <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                     </svg>
                   ))}
                 </div>
                 <div className="text-[11.5px] text-[#7E6955] mt-1 font-light">
-                  Based on {reviews.length} reviews
+                  Based on {reviews.length} {reviews.length === 1 ? "review" : "reviews"}
                 </div>
               </div>
 
               {/* Progress bars */}
               <div className="space-y-1.5 text-xs text-[#7E6955] font-sans">
-                {[5, 4, 3, 2, 1].map((star) => (
-                  <div key={star} className="flex items-center space-x-2">
-                    <span className="w-3 text-right text-[11px]">★</span>
-                    <span className="w-2 text-[11px]">{star}</span>
-                    <div className="w-28 sm:w-44 h-1.5 bg-[#EFE7DC] rounded-full overflow-hidden">
-                      <div
-                        className="h-full bg-[#1C2820] rounded-full"
-                        style={{ width: star === 5 ? "100%" : "0%" }}
-                      />
+                {[5, 4, 3, 2, 1].map((star) => {
+                  const starCount = reviews.filter(
+                    (r) => Math.round(r.rating) === star
+                  ).length;
+                  const pct =
+                    reviews.length > 0 ? (starCount / reviews.length) * 100 : 0;
+                  return (
+                    <div key={star} className="flex items-center space-x-2">
+                      <span className="w-3 text-right text-[11px]">★</span>
+                      <span className="w-2 text-[11px]">{star}</span>
+                      <div className="w-28 sm:w-44 h-1.5 bg-[#EFE7DC] rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#1C2820] rounded-full"
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                      <span className="w-3 text-right text-[11px]">{starCount}</span>
                     </div>
-                    <span className="w-3 text-right text-[11px]">{star === 5 ? reviews.length : 0}</span>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -968,35 +1378,41 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
 
           {/* Customer Reviews List */}
           <div className="space-y-3.5">
-            {reviews.map((rev) => (
-              <div
-                key={rev.id}
-                className="bg-white border border-[#DFCBB8]/70 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2"
-              >
-                <div className="flex items-center justify-between text-xs text-[#7E6955]">
-                  <div className="flex items-center space-x-2">
-                    <div className="flex text-[#C89438] space-x-0.5">
-                      {[...Array(rev.rating)].map((_, i) => (
-                        <svg key={i} className="w-3.5 h-3.5 fill-[#C89438]" viewBox="0 0 24 24">
-                          <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
-                        </svg>
-                      ))}
-                    </div>
-                    <span className="font-semibold text-[#2C2117] text-xs">{rev.author}</span>
-                    {rev.verified && (
-                      <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-sm border border-emerald-200">
-                        Verified Buyer
-                      </span>
-                    )}
-                  </div>
-                  <span className="font-light text-[11px]">{rev.date}</span>
-                </div>
-
-                <p className="text-xs sm:text-[12.5px] text-[#4A392C] font-light leading-relaxed">
-                  {rev.comment}
-                </p>
+            {reviews.length === 0 ? (
+              <div className="bg-white border border-[#DFCBB8]/70 rounded-2xl p-6 text-center text-xs text-[#7E6955] font-light">
+                No reviews yet for this product. Be the first to share your experience!
               </div>
-            ))}
+            ) : (
+              reviews.map((rev) => (
+                <div
+                  key={rev.id}
+                  className="bg-white border border-[#DFCBB8]/70 rounded-2xl p-4 sm:p-5 shadow-2xs space-y-2"
+                >
+                  <div className="flex items-center justify-between text-xs text-[#7E6955]">
+                    <div className="flex items-center space-x-2">
+                      <div className="flex text-[#C89438] space-x-0.5">
+                        {[...Array(rev.rating)].map((_, i) => (
+                          <svg key={i} className="w-3.5 h-3.5 fill-[#C89438]" viewBox="0 0 24 24">
+                            <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
+                          </svg>
+                        ))}
+                      </div>
+                      <span className="font-semibold text-[#2C2117] text-xs">{rev.author}</span>
+                      {rev.verified && (
+                        <span className="text-[10px] text-emerald-700 bg-emerald-50 px-1.5 py-0.2 rounded-sm border border-emerald-200">
+                          Verified Buyer
+                        </span>
+                      )}
+                    </div>
+                    <span className="font-light text-[11px]">{rev.date}</span>
+                  </div>
+
+                  <p className="text-xs sm:text-[12.5px] text-[#4A392C] font-light leading-relaxed">
+                    {rev.comment}
+                  </p>
+                </div>
+              ))
+            )}
           </div>
         </div>
 
@@ -1084,4 +1500,3 @@ export function ProductDetailView({ product }: ProductDetailViewProps) {
     </div>
   );
 }
-

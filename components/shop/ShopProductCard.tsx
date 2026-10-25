@@ -15,6 +15,8 @@ export function ShopProductCard({ product }: ShopProductCardProps) {
   const [isAdding, setIsAdding] = useState(false);
   const isLiked = isWishlisted(product.id);
 
+  const isOutOfStock = typeof product.stock === "number" && product.stock <= 0;
+
   const handleToggleFavorite = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
@@ -24,6 +26,7 @@ export function ShopProductCard({ product }: ShopProductCardProps) {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.preventDefault();
     e.stopPropagation();
+    if (isOutOfStock) return;
     setIsAdding(true);
     addToCart(product, 1);
     setTimeout(() => setIsAdding(false), 1200);
@@ -85,28 +88,33 @@ export function ShopProductCard({ product }: ShopProductCardProps) {
             <button
               type="button"
               onClick={handleAddToCart}
-              className={`w-full py-1.5 px-3 rounded-xl text-xs font-sans font-medium tracking-wide flex items-center justify-center space-x-1.5 transition-all shadow-md cursor-pointer ${
-                isAdding
-                  ? "bg-[#2A372E] text-[#E6CA65]"
-                  : "bg-[#1C2820]/95 hover:bg-[#1C2820] text-[#FAF5EB]"
+              disabled={isOutOfStock}
+              className={`w-full py-1.5 px-3 rounded-xl text-xs font-sans font-medium tracking-wide flex items-center justify-center space-x-1.5 transition-all shadow-md ${
+                isOutOfStock
+                  ? "bg-stone-300 text-stone-600 cursor-not-allowed opacity-95"
+                  : isAdding
+                  ? "bg-[#2A372E] text-[#E6CA65] cursor-pointer"
+                  : "bg-[#1C2820]/95 hover:bg-[#1C2820] text-[#FAF5EB] cursor-pointer"
               }`}
             >
-              <svg
-                xmlns="http://www.w3.org/2000/svg"
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              >
-                <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                <line x1="3" y1="6" x2="21" y2="6"></line>
-                <path d="M16 10a4 4 0 0 1-8 0"></path>
-              </svg>
-              <span>{isAdding ? "Added! ✓" : "Quick Add"}</span>
+              {!isOutOfStock && (
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="13"
+                  height="13"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                >
+                  <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                  <line x1="3" y1="6" x2="21" y2="6"></line>
+                  <path d="M16 10a4 4 0 0 1-8 0"></path>
+                </svg>
+              )}
+              <span>{isOutOfStock ? "Out of Stock" : isAdding ? "Added! ✓" : "Quick Add"}</span>
             </button>
           </div>
         </Link>
@@ -160,9 +168,14 @@ export function ShopProductCard({ product }: ShopProductCardProps) {
             <button
               type="button"
               onClick={handleAddToCart}
-              className="sm:hidden p-1.5 rounded-full bg-[#1C2820] text-white hover:bg-[#2B3B30] transition-colors cursor-pointer"
-              title="Add to Cart"
-              aria-label="Add to cart"
+              disabled={isOutOfStock}
+              className={`sm:hidden p-1.5 rounded-full transition-colors ${
+                isOutOfStock
+                  ? "bg-stone-300 text-stone-500 cursor-not-allowed"
+                  : "bg-[#1C2820] text-white hover:bg-[#2B3B30] cursor-pointer"
+              }`}
+              title={isOutOfStock ? "Out of Stock" : "Add to Cart"}
+              aria-label={isOutOfStock ? "Out of stock" : "Add to cart"}
             >
               <svg
                 xmlns="http://www.w3.org/2000/svg"

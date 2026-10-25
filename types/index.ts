@@ -1,8 +1,29 @@
 export * from "./navigation";
+export * from "./auth";
 
 export interface BrandPillar {
   title: string;
   description: string;
+}
+
+export interface ProductCategoryInfo {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface ProductOccasionInfo {
+  id: string;
+  name: string;
+  slug: string;
+}
+
+export interface ProductImageInfo {
+  id: string;
+  url: string;
+  altText?: string | null;
+  isPrimary?: boolean;
+  sortOrder?: number;
 }
 
 export interface Product {
@@ -10,15 +31,23 @@ export interface Product {
   name: string;
   href: string;
   imageSrc: string;
-  originalPrice?: number;
+  slug?: string;
+  description?: string | null;
+  shortDescription?: string | null;
+  originalPrice?: number | null;
   price: number;
-  pricePrefix?: string;
+  pricePrefix?: string | null;
+  sku?: string | null;
+  stock?: number;
   rating?: number;
   reviewCount?: number;
   isNew?: boolean;
-  badge?: string;
+  badge?: string | null;
   category?: string;
   categories?: string[];
+  occasions?: ProductOccasionInfo[];
+  primaryImage?: ProductImageInfo | null;
+  images?: ProductImageInfo[];
 }
 
 export interface ShopCategoryItem {

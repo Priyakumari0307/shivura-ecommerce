@@ -2,9 +2,17 @@
 
 import React from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { Container } from "@/components/ui/Container";
 
 export function Footer() {
+  const pathname = usePathname();
+
+  // Do not render consumer footer in CRM
+  if (pathname?.startsWith("/CRM") || pathname?.startsWith("/crm")) {
+    return null;
+  }
+
   const footerLinks = [
     { label: "Contact", href: "/contact" },
     { label: "Returns", href: "/returns" },

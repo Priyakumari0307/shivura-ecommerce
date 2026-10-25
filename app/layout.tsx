@@ -4,6 +4,7 @@ import "./globals.css";
 import { AnnouncementBar } from "@/components/layout/AnnouncementBar";
 import { Header } from "@/components/layout/Header";
 import { Footer } from "@/components/layout/Footer";
+import { AuthProvider } from "@/context/AuthContext";
 import { ShopProvider } from "@/context/ShopContext";
 
 const sansFont = Plus_Jakarta_Sans({
@@ -36,12 +37,14 @@ export default function RootLayout({
       className={`${sansFont.variable} ${serifFont.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col bg-[#FAF8F5] text-neutral-900 selection:bg-stone-300 selection:text-neutral-900">
-        <ShopProvider>
-          <AnnouncementBar />
-          <Header />
-          <main className="flex-1">{children}</main>
-          <Footer />
-        </ShopProvider>
+        <AuthProvider>
+          <ShopProvider>
+            <AnnouncementBar />
+            <Header />
+            <main className="flex-1">{children}</main>
+            <Footer />
+          </ShopProvider>
+        </AuthProvider>
       </body>
     </html>
   );

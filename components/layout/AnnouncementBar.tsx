@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { ANNOUNCEMENT_TEXT } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 
@@ -18,8 +19,14 @@ export function AnnouncementBar({
   closable = false,
   className,
 }: AnnouncementBarProps) {
+  const pathname = usePathname();
   const [isVisible, setIsVisible] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
+
+  // Do not render consumer announcement bar in CRM
+  if (pathname?.startsWith("/CRM") || pathname?.startsWith("/crm")) {
+    return null;
+  }
 
   if (!isVisible) return null;
 

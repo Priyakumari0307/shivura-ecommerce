@@ -26,13 +26,13 @@ export const OCCASIONS_DATA: OccasionItem[] = [
   {
     id: "rakhi",
     name: "Rakhi",
-    image: null,
+    image: "/images/om-rakhi.jpg",
     slug: "rakhi",
   },
   {
     id: "festive-gifting",
     name: "Festive Gifting",
-    image: "/images/lighting.png",
+    image: "/images/gifting.png",
     slug: "festive-gifting",
     lineBreakName: (
       <>
@@ -45,13 +45,58 @@ export const OCCASIONS_DATA: OccasionItem[] = [
   {
     id: "everyday-living",
     name: "Everyday Living",
-    image: "/images/gifting.png",
+    image: "/images/home decor.png",
     slug: "everyday-living",
     lineBreakName: (
       <>
         Everyday
         <br />
         Living
+      </>
+    ),
+  },
+  {
+    id: "griha-pravesh",
+    name: "Griha Pravesh",
+    image: "/images/explore image.png",
+    slug: "griha-pravesh",
+    lineBreakName: (
+      <>
+        Griha
+        <br />
+        Pravesh
+      </>
+    ),
+  },
+  {
+    id: "weddings",
+    name: "Weddings",
+    image: "/images/artisan-diya-woman.jpg",
+    slug: "weddings",
+  },
+  {
+    id: "puja-rituals",
+    name: "Puja & Rituals",
+    image: "/images/terracotta-diyas-cloth.jpg",
+    slug: "puja-rituals",
+    lineBreakName: (
+      <>
+        Puja &amp;
+        <br />
+        Rituals
+      </>
+    ),
+  },
+  {
+    id: "new-beginnings",
+    name: "New Beginnings",
+    image: "/images/Product1.png",
+    slug: "new-beginnings",
+    lineBreakName: (
+      <>
+        New
+        <br />
+        Beginnings
       </>
     ),
   },
@@ -72,22 +117,108 @@ function getOccasionHref(occasion: OccasionItem): string {
   return `/shop?category=${encodeURIComponent(occasion.slug)}`;
 }
 
-export function ShopByOccasion({ occasions = OCCASIONS_DATA }: ShopByOccasionProps) {
+const OCCASION_LINE_BREAKS: Record<string, React.ReactNode> = {
+  "festive-gifting": (
+    <>
+      Festive
+      <br />
+      Gifting
+    </>
+  ),
+  "everyday-living": (
+    <>
+      Everyday
+      <br />
+      Living
+    </>
+  ),
+  "griha-pravesh": (
+    <>
+      Griha
+      <br />
+      Pravesh
+    </>
+  ),
+  "puja-rituals": (
+    <>
+      Puja &amp;
+      <br />
+      Rituals
+    </>
+  ),
+  "new-beginnings": (
+    <>
+      New
+      <br />
+      Beginnings
+    </>
+  ),
+};
+
+export function ShopByOccasion({ occasions: initialOccasions }: ShopByOccasionProps) {
+  const [fetchedOccasions, setFetchedOccasions] = useState<OccasionItem[] | null>(null);
+  const occasions =
+    initialOccasions && initialOccasions.length > 0
+      ? initialOccasions
+      : fetchedOccasions && fetchedOccasions.length > 0
+      ? fetchedOccasions
+      : OCCASIONS_DATA;
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isScrollable, setIsScrollable] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const isMouseDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+
+  // Graceful client fallback to public occasions API if no occasions were provided
+  useEffect(() => {
+    if (!initialOccasions || initialOccasions.length === 0) {
+      let isMounted = true;
+      fetch("/api/occasions")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (isMounted && json?.data && Array.isArray(json.data) && json.data.length > 0) {
+            setFetchedOccasions(json.data);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [initialOccasions]);
 
   const checkScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
     const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
-    setCanScrollLeft(scrollLeft > 2);
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 2);
+    const maxScroll = scrollWidth - clientWidth;
+    const scrollable = maxScroll > 4;
+    setIsScrollable(scrollable);
+    setCanScrollLeft(scrollLeft > 4);
+    setCanScrollRight(scrollLeft < maxScroll - 4);
   }, []);
 
   useEffect(() => {
     checkScroll();
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        checkScroll();
+      });
+      resizeObserver.observe(container);
+    }
+
     window.addEventListener("resize", checkScroll);
     return () => {
+      if (resizeObserver) resizeObserver.disconnect();
       window.removeEventListener("resize", checkScroll);
     };
   }, [checkScroll, occasions]);
@@ -95,42 +226,77 @@ export function ShopByOccasion({ occasions = OCCASIONS_DATA }: ShopByOccasionPro
   const scroll = (direction: "left" | "right") => {
     if (!scrollContainerRef.current) return;
     const container = scrollContainerRef.current;
-    const scrollAmount = Math.max(container.clientWidth * 0.75, 200);
+    const scrollAmount = Math.max(container.clientWidth * 0.75, 220);
     container.scrollBy({
       left: direction === "left" ? -scrollAmount : scrollAmount,
       behavior: "smooth",
     });
+    setTimeout(checkScroll, 350);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !scrollContainerRef.current) return;
+    isMouseDownRef.current = true;
+    hasDraggedRef.current = false;
+    startXRef.current = e.pageX - scrollContainerRef.current.offsetLeft;
+    scrollLeftRef.current = scrollContainerRef.current.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMouseDownRef.current || !scrollContainerRef.current) return;
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const delta = x - startXRef.current;
+    if (Math.abs(delta) > 5) {
+      if (!isDragging) setIsDragging(true);
+      hasDraggedRef.current = true;
+    }
+    if (hasDraggedRef.current) {
+      e.preventDefault();
+      scrollContainerRef.current.scrollLeft = scrollLeftRef.current - delta;
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (!isMouseDownRef.current) return;
+    isMouseDownRef.current = false;
+    setIsDragging(false);
+    setTimeout(() => {
+      hasDraggedRef.current = false;
+      checkScroll();
+    }, 50);
   };
 
   return (
-    <section className="py-7 sm:py-9 lg:py-11 bg-[#FAF8F5] border-b border-stone-200/60">
+    <section className="w-full overflow-hidden py-7 sm:py-10 bg-[#FAF8F5] border-b border-stone-200/60">
       <Container size="wide">
         {/* Section Heading & Subtitle */}
-        <div className="text-center mb-5 sm:mb-7">
-          <h2 className="font-serif text-2xl sm:text-3xl lg:text-[34px] text-[#1E2922] font-normal tracking-tight">
+        <div className="text-center mb-6 sm:mb-8">
+          <h2 className="font-serif text-2xl sm:text-3xl lg:text-4xl text-neutral-900 font-normal tracking-tight">
             Shop by Occasion
           </h2>
-          <p className="text-xs sm:text-[13px] text-[#735F4E] font-light mt-1 sm:mt-1.5">
-            Find the perfect for every moment
+          <div className="w-10 h-[1px] bg-neutral-300 mx-auto mt-2.5 sm:mt-3 mb-2" />
+          <p className="text-xs sm:text-[13px] text-[#735F4E] font-light">
+            Find the perfect gift for every sacred moment &amp; celebration
           </p>
         </div>
 
         {/* Carousel Slider with Navigation Arrows */}
-        <div className="relative group/carousel max-w-5xl mx-auto px-2 sm:px-6">
-          {/* Left Arrow Button */}
+        <div className="relative group/carousel max-w-6xl mx-auto px-2 sm:px-6">
+          {/* Left Arrow Button (Desktop / Tablet) */}
           <button
             type="button"
             onClick={() => scroll("left")}
             disabled={!canScrollLeft}
             aria-label="Previous occasions"
+            aria-disabled={!canScrollLeft}
             className={cn(
-              "absolute -left-2 sm:-left-3 lg:-left-5 top-12 sm:top-16 lg:top-18 -translate-y-1/2 z-20",
-              "w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#FAF7F2]/95 border border-[#DFC9A8] shadow-md shadow-[#DFC9A8]/30",
-              "flex items-center justify-center text-[#735F4E] hover:text-stone-100 hover:bg-[#1E3028] hover:border-[#1E3028] hover:shadow-lg",
-              "transition-all duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8E531A]",
+              "hidden sm:flex absolute -left-2 sm:-left-3 lg:-left-5 top-14 sm:top-18 lg:top-20 -translate-y-1/2 z-20",
+              "w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/95 border border-stone-300/80 shadow-md shadow-stone-900/5",
+              "items-center justify-center text-neutral-700",
+              "transition-all duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-800",
               !canScrollLeft
-                ? "opacity-0 pointer-events-none cursor-not-allowed scale-90"
-                : "opacity-100 hover:scale-105 active:scale-95 cursor-pointer"
+                ? "opacity-35 cursor-not-allowed border-stone-200 text-stone-300 bg-white/60 shadow-none"
+                : "opacity-100 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 hover:shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
             )}
           >
             <svg
@@ -148,20 +314,21 @@ export function ShopByOccasion({ occasions = OCCASIONS_DATA }: ShopByOccasionPro
             </svg>
           </button>
 
-          {/* Right Arrow Button */}
+          {/* Right Arrow Button (Desktop / Tablet) */}
           <button
             type="button"
             onClick={() => scroll("right")}
             disabled={!canScrollRight}
             aria-label="Next occasions"
+            aria-disabled={!canScrollRight}
             className={cn(
-              "absolute -right-2 sm:-right-3 lg:-right-5 top-12 sm:top-16 lg:top-18 -translate-y-1/2 z-20",
-              "w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#FAF7F2]/95 border border-[#DFC9A8] shadow-md shadow-[#DFC9A8]/30",
-              "flex items-center justify-center text-[#735F4E] hover:text-stone-100 hover:bg-[#1E3028] hover:border-[#1E3028] hover:shadow-lg",
-              "transition-all duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-[#8E531A]",
+              "hidden sm:flex absolute -right-2 sm:-right-3 lg:-right-5 top-14 sm:top-18 lg:top-20 -translate-y-1/2 z-20",
+              "w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/95 border border-stone-300/80 shadow-md shadow-stone-900/5",
+              "items-center justify-center text-neutral-700",
+              "transition-all duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-800",
               !canScrollRight
-                ? "opacity-0 pointer-events-none cursor-not-allowed scale-90"
-                : "opacity-100 hover:scale-105 active:scale-95 cursor-pointer"
+                ? "opacity-35 cursor-not-allowed border-stone-200 text-stone-300 bg-white/60 shadow-none"
+                : "opacity-100 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 hover:shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
             )}
           >
             <svg
@@ -183,63 +350,92 @@ export function ShopByOccasion({ occasions = OCCASIONS_DATA }: ShopByOccasionPro
           <div
             ref={scrollContainerRef}
             onScroll={checkScroll}
-            className="overflow-x-auto scroll-smooth py-3 px-2 sm:px-4 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpOrLeave}
+            onMouseLeave={handleMouseUpOrLeave}
+            className={cn(
+              "overflow-x-auto py-3 px-2 sm:px-4 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+              isDragging ? "cursor-grabbing select-none" : isScrollable ? "cursor-grab" : ""
+            )}
             style={{
-              scrollSnapType: "x proximity",
+              scrollSnapType: isDragging ? "none" : "x proximity",
+              scrollBehavior: isDragging ? "auto" : "smooth",
               WebkitOverflowScrolling: "touch",
             }}
           >
-            <div className="flex items-start gap-5 sm:gap-7 lg:gap-8 xl:gap-10 w-fit min-w-full justify-start sm:justify-center mx-auto">
+            <div
+              className={cn(
+                "flex items-start gap-6 sm:gap-8 lg:gap-10 w-fit min-w-full",
+                isScrollable ? "justify-start" : "justify-start sm:justify-center mx-auto"
+              )}
+            >
               {occasions.map((occasion) => {
                 const image = occasion.image || occasion.imageSrc;
                 const href = getOccasionHref(occasion);
+                const displayName =
+                  occasion.lineBreakName ||
+                  OCCASION_LINE_BREAKS[occasion.slug] ||
+                  occasion.name;
 
                 return (
                   <Link
                     key={occasion.id}
                     href={href}
-                    className="group flex flex-col items-center text-center shrink-0 focus:outline-none"
+                    onClick={(e) => {
+                      if (hasDraggedRef.current) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }
+                    }}
+                    draggable={false}
+                    className={cn(
+                      "group flex flex-col items-center text-center space-y-3 shrink-0 focus:outline-none select-none",
+                      isDragging ? "cursor-grabbing" : "cursor-pointer"
+                    )}
                     style={{ scrollSnapAlign: "center" }}
                   >
-                    {/* Circular Container with Gold Border */}
-                    <div className="relative w-24 h-24 sm:w-32 sm:h-32 lg:w-36 lg:h-36 rounded-full overflow-hidden border-[2.5px] border-[#DFC9A8] ring-3 ring-white/90 bg-[#F4EDE2] shadow-sm group-hover:border-[#B5874B] group-hover:shadow-md group-hover:scale-105 transition-all duration-500">
+                    {/* Circular Avatar / Image Container */}
+                    <div className="relative w-28 h-28 sm:w-36 sm:h-36 lg:w-40 lg:h-40 rounded-full border-2 border-[#DFC9A8] ring-4 ring-white/90 bg-[#F4EDE2] overflow-hidden shadow-2xs group-hover:border-neutral-900 group-hover:shadow-md group-hover:scale-105 transition-all duration-300">
                       {image ? (
                         <Image
                           src={image}
                           alt={occasion.name}
                           fill
-                          unoptimized
-                          sizes="(max-width: 640px) 96px, (max-width: 1024px) 128px, 144px"
-                          className="object-cover group-hover:scale-110 transition-transform duration-700 ease-out"
+                          sizes="(max-width: 640px) 112px, (max-width: 1024px) 144px, 160px"
+                          className="object-cover group-hover:scale-110 transition-transform duration-500 ease-out pointer-events-none select-none"
+                          draggable={false}
                         />
                       ) : (
-                        /* Blank Aesthetic Placeholder for Rakhi / null images */
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-[#F5EFE6] via-[#EFE6D8] to-[#E9DCB] text-[#9E866D] group-hover:text-[#7A6451] transition-colors p-3">
+                        /* Blank Aesthetic Placeholder */
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-stone-100 via-stone-200/60 to-stone-100 text-neutral-400 group-hover:text-neutral-700 transition-colors pointer-events-none select-none">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
+                            width="28"
+                            height="28"
                             viewBox="0 0 24 24"
                             fill="none"
                             stroke="currentColor"
                             strokeWidth="1.25"
                             strokeLinecap="round"
                             strokeLinejoin="round"
-                            className="w-6 h-6 opacity-75 group-hover:scale-110 transition-transform"
+                            className="opacity-60 group-hover:scale-110 transition-transform"
                           >
-                            <circle cx="12" cy="12" r="9" strokeDasharray="3 3" />
-                            <circle cx="12" cy="12" r="3" />
-                            <path d="M12 3v3M12 18v3M3 12h3M18 12h3" />
+                            <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                            <circle cx="9" cy="9" r="2" />
+                            <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
                           </svg>
-                          <span className="text-[9px] font-sans uppercase tracking-[0.2em] mt-1 opacity-80">
-                            Coming Soon
+                          <span className="text-[10px] font-sans uppercase tracking-[0.2em] mt-1 opacity-70">
+                            Photo
                           </span>
                         </div>
                       )}
                     </div>
 
                     {/* Occasion Label */}
-                    <div className="mt-2.5 sm:mt-3 min-h-[36px] flex items-start justify-center">
-                      <span className="font-serif text-sm sm:text-[15px] lg:text-base text-[#2A2017] font-normal leading-[1.25] tracking-wide group-hover:text-[#8E531A] transition-colors">
-                        {occasion.lineBreakName || occasion.name}
+                    <div className="min-h-[40px] flex items-start justify-center">
+                      <span className="font-serif text-sm sm:text-base text-neutral-800 font-normal tracking-wide group-hover:text-neutral-950 transition-colors leading-tight">
+                        {displayName}
                       </span>
                     </div>
                   </Link>

@@ -6,9 +6,11 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { useShop } from "@/context/ShopContext";
+import { useAuth } from "@/context/AuthContext";
 
 export default function CartPage() {
   const { cart, updateCartQuantity, removeFromCart, clearCart, cartSubtotal, cartCount } = useShop();
+  const { isAuthenticated, requireAuth } = useAuth();
   const [couponCode, setCouponCode] = useState("");
   const [appliedDiscount, setAppliedDiscount] = useState(0);
   const [couponError, setCouponError] = useState("");
@@ -270,7 +272,17 @@ export default function CartPage() {
                 {/* Checkout CTA */}
                 <button
                   type="button"
-                  onClick={() => alert("Thank you for shopping with Shivura! Checkout simulation complete.")}
+                  onClick={() => {
+                    if (!isAuthenticated) {
+                      requireAuth({
+                        type: "CHECKOUT",
+                        returnUrl: "/cart",
+                        reason: "checkout",
+                      });
+                      return;
+                    }
+                    alert("Thank you for shopping with Shivura! Checkout simulation complete.");
+                  }}
                   className="w-full py-3.5 px-6 rounded-xl bg-[#1C2820] hover:bg-[#2B3B30] text-[#FAF5EB] text-xs uppercase tracking-widest font-sans font-medium transition-all shadow-md hover:shadow-lg cursor-pointer flex items-center justify-center space-x-2"
                 >
                   <span>Proceed to Checkout</span>

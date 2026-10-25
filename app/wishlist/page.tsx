@@ -6,9 +6,11 @@ import Link from "next/link";
 import { Container } from "@/components/ui/Container";
 import { Button } from "@/components/ui/Button";
 import { useShop } from "@/context/ShopContext";
+import { useAuth } from "@/context/AuthContext";
 
 export default function WishlistPage() {
   const { wishlist, removeFromWishlist, addToCart } = useShop();
+  const { isAuthenticated } = useAuth();
 
   return (
     <div className="py-12 sm:py-16 bg-[#FAF8F5] min-h-[75vh]">
@@ -156,10 +158,20 @@ export default function WishlistPage() {
                 Tap the heart icon on any handcrafted piece in our shop to curate your favorite treasures.
               </p>
             </div>
-            <div className="pt-2">
+            <div className="pt-2 space-y-2">
               <Button href="/shop" variant="primary">
                 Explore Handcrafted Shop
               </Button>
+              {!isAuthenticated && (
+                <div className="pt-1">
+                  <Link
+                    href="/login?returnUrl=%2Fwishlist&reason=wishlist"
+                    className="text-xs text-[#B88746] hover:underline font-medium block"
+                  >
+                    Already have an account? Sign in to view saved items →
+                  </Link>
+                </div>
+              )}
             </div>
           </div>
         )}

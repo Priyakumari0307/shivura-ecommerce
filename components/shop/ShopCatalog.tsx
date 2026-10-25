@@ -2,12 +2,87 @@
 
 import React, { useState, useMemo, useRef, useEffect } from "react";
 import { Product } from "@/types";
-import { ALL_PRODUCTS, SHOP_SIDEBAR_CATEGORIES } from "@/lib/constants";
+import { SHOP_SIDEBAR_CATEGORIES } from "@/lib/constants";
 import { ShopProductCard } from "./ShopProductCard";
 
 interface ShopCatalogProps {
   initialCategory?: string;
   initialQuery?: string;
+}
+
+interface ApiProductResponseItem {
+  id: string;
+  name: string;
+  slug: string;
+  href: string;
+  description?: string | null;
+  shortDescription?: string | null;
+  price: number;
+  originalPrice?: number | null;
+  pricePrefix?: string | null;
+  sku?: string | null;
+  stock?: number;
+  isAvailable?: boolean;
+  rating?: number;
+  reviewCount?: number;
+  badge?: string | null;
+  isNew?: boolean;
+  imageSrc?: string | null;
+  primaryImage?: {
+    id: string;
+    url: string;
+    altText?: string | null;
+    isPrimary?: boolean;
+  } | null;
+  images?: {
+    id: string;
+    url: string;
+    altText?: string | null;
+    isPrimary?: boolean;
+    sortOrder?: number;
+  }[];
+  categories?: {
+    id: string;
+    name: string;
+    slug: string;
+  }[];
+  occasions?: {
+    id: string;
+    name: string;
+    slug: string;
+  }[];
+}
+
+/**
+ * Adapts API product format to the frontend Product type.
+ */
+function mapApiToProduct(item: ApiProductResponseItem): Product {
+  const categorySlugs = (item.categories || []).map((c) => c.slug || c.id);
+  const primaryCat = categorySlugs[0] || "";
+
+  return {
+    id: item.id,
+    name: item.name,
+    href: item.href || `/shop/${item.slug}`,
+    imageSrc: item.imageSrc || item.primaryImage?.url || "/images/Product1.png",
+    slug: item.slug,
+    description: item.description,
+    shortDescription: item.shortDescription,
+    price: Number(item.price),
+    originalPrice: item.originalPrice ? Number(item.originalPrice) : undefined,
+    pricePrefix: item.pricePrefix || undefined,
+    sku: item.sku,
+    stock: item.stock,
+    rating: item.rating,
+    reviewCount: item.reviewCount,
+    isNew: item.isNew,
+    badge: item.badge || undefined,
+    category: primaryCat,
+    categories: categorySlugs,
+    primaryImage: item.primaryImage,
+    images: item.images,
+    occasions: item.occasions,
+  };
 }
 
 export function ShopCatalog({
@@ -16,8 +91,15 @@ export function ShopCatalog({
 }: ShopCatalogProps) {
   const [selectedCategory, setSelectedCategory] = useState<string>(initialCategory);
   const [searchQuery, setSearchQuery] = useState<string>(initialQuery);
+  const [debouncedQuery, setDebouncedQuery] = useState<string>(initialQuery);
   const [sortBy, setSortBy] = useState<string>("default");
   const [isFilterOpen, setIsFilterOpen] = useState<boolean>(false);
+
+  const [products, setProducts] = useState<Product[]>([]);
+  const [allProductsForCounts, setAllProductsForCounts] = useState<Product[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [error, setError] = useState<string | null>(null);
+
   const dropdownRef = useRef<HTMLDivElement>(null);
 
   // Close dropdown when clicking outside
@@ -41,13 +123,31 @@ export function ShopCatalog({
   }, []);
 
   // Update selection if initial props change
-  useEffect(() => {
+  const [prevInitialCategory, setPrevInitialCategory] = useState(initialCategory);
+  if (initialCategory !== prevInitialCategory) {
+    setPrevInitialCategory(initialCategory);
     if (initialCategory) setSelectedCategory(initialCategory);
-  }, [initialCategory]);
+  }
 
+  const [prevInitialQuery, setPrevInitialQuery] = useState(initialQuery);
+  if (initialQuery !== prevInitialQuery) {
+    setPrevInitialQuery(initialQuery);
+    if (initialQuery) {
+      setSearchQuery(initialQuery);
+      setDebouncedQuery(initialQuery);
+    }
+  }
+
+  // Debounce search query changes
   useEffect(() => {
-    if (initialQuery) setSearchQuery(initialQuery);
-  }, [initialQuery]);
+    const timer = setTimeout(() => {
+      setDebouncedQuery(searchQuery);
+    }, 350);
+
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   // Get active category display title
   const currentCategoryObj = useMemo(() => {
@@ -60,75 +160,110 @@ export function ShopCatalog({
     );
   }, [selectedCategory]);
 
-  // Count products per category for badge indicators in dropdown
+  // Fetch full product list once to compute accurate category badge counts
+  useEffect(() => {
+    let isMounted = true;
+    fetch("/api/products?limit=100")
+      .then((res) => (res.ok ? res.json() : null))
+      .then((json) => {
+        if (isMounted && json?.success && Array.isArray(json.data)) {
+          setAllProductsForCounts(json.data.map(mapApiToProduct));
+        }
+      })
+      .catch(() => {});
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  // Compute product count per category for badge indicators in dropdown
   const categoryCounts = useMemo(() => {
-    const counts: Record<string, number> = { all: ALL_PRODUCTS.length };
+    const counts: Record<string, number> = { all: allProductsForCounts.length };
     SHOP_SIDEBAR_CATEGORIES.forEach((cat) => {
       if (cat.id === "all") return;
-      counts[cat.id] = ALL_PRODUCTS.filter((p) => {
-        return (
-          p.categories?.includes(cat.id) ||
-          p.category === cat.id ||
-          (cat.id === "bestseller" && p.badge === "Bestseller") ||
-          (cat.id === "new" && (p.isNew || p.badge === "New"))
-        );
+      counts[cat.id] = allProductsForCounts.filter((p) => {
+        if (cat.id === "bestseller") {
+          return p.badge?.toLowerCase() === "bestseller";
+        }
+        if (cat.id === "new") {
+          return Boolean(p.isNew || p.badge?.toLowerCase() === "new");
+        }
+        return p.categories?.includes(cat.id) || p.category === cat.id;
       }).length;
     });
     return counts;
-  }, []);
+  }, [allProductsForCounts]);
 
-  // Filter products by category and search query
-  const filteredProducts = useMemo(() => {
-    return ALL_PRODUCTS.filter((product) => {
-      // Category filter
-      if (selectedCategory && selectedCategory !== "all") {
-        const matchesCategory =
-          product.categories?.includes(selectedCategory) ||
-          product.category === selectedCategory ||
-          (selectedCategory === "bestseller" && product.badge === "Bestseller") ||
-          (selectedCategory === "new" && (product.isNew || product.badge === "New"));
+  // Fetch products from /api/products whenever category, search, or sort changes
+  useEffect(() => {
+    let isMounted = true;
 
-        if (!matchesCategory) return false;
+    void (async () => {
+      await Promise.resolve();
+      if (!isMounted) return;
+      setIsLoading(true);
+      setError(null);
+
+      const params = new URLSearchParams();
+      params.set("limit", "100");
+
+      if (debouncedQuery.trim()) {
+        params.set("search", debouncedQuery.trim());
       }
 
-      // Search query filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesName = product.name.toLowerCase().includes(q);
-        const matchesCategory = product.category?.toLowerCase().includes(q);
-        if (!matchesName && !matchesCategory) return false;
+      // Category filter (bestseller is filtered client-side by badge)
+      if (selectedCategory && selectedCategory !== "all" && selectedCategory !== "bestseller") {
+        params.set("category", selectedCategory);
       }
 
-      return true;
-    });
-  }, [selectedCategory, searchQuery]);
+      if (sortBy && sortBy !== "default") {
+        params.set("sort", sortBy);
+      }
 
-  // Sort filtered products
-  const sortedProducts = useMemo(() => {
-    const list = [...filteredProducts];
-    if (sortBy === "price-low") {
-      return list.sort((a, b) => a.price - b.price);
-    }
-    if (sortBy === "price-high") {
-      return list.sort((a, b) => b.price - a.price);
-    }
-    if (sortBy === "rating") {
-      return list.sort((a, b) => (b.rating || 0) - (a.rating || 0));
-    }
-    if (sortBy === "newest") {
-      return list.sort((a, b) => (b.isNew ? 1 : 0) - (a.isNew ? 1 : 0));
-    }
-    return list;
-  }, [filteredProducts, sortBy]);
+      try {
+        const res = await fetch(`/api/products?${params.toString()}`);
+        if (!res.ok) {
+          throw new Error("Failed to fetch products");
+        }
+        const json = await res.json();
+        if (!isMounted) return;
+        if (json.success && Array.isArray(json.data)) {
+          let items: Product[] = json.data.map(mapApiToProduct);
+          // Handle bestseller merchandising filter
+          if (selectedCategory === "bestseller") {
+            items = items.filter(
+              (p) => p.badge?.toLowerCase() === "bestseller"
+            );
+          }
+          setProducts(items);
+        } else {
+          setProducts([]);
+        }
+        setIsLoading(false);
+      } catch (err) {
+        if (!isMounted) return;
+        console.error("ShopCatalog API fetch error:", err);
+        setError("Unable to load products. Please try again later.");
+        setIsLoading(false);
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [selectedCategory, debouncedQuery, sortBy]);
 
   const handleResetFilters = () => {
     setSelectedCategory("all");
     setSearchQuery("");
+    setDebouncedQuery("");
     setSortBy("default");
     setIsFilterOpen(false);
   };
 
-  const isFiltered = selectedCategory !== "all" || searchQuery.trim() !== "" || sortBy !== "default";
+  const isFiltered =
+    selectedCategory !== "all" || searchQuery.trim() !== "" || sortBy !== "default";
 
   return (
     <div className="relative pt-6 pb-12 sm:pt-8 sm:pb-16 bg-[#FAF8F5] min-h-[700px] overflow-hidden">
@@ -273,7 +408,10 @@ export function ShopCatalog({
               {searchQuery && (
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setDebouncedQuery("");
+                  }}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-[#9E8B7A] hover:text-[#382B1F] cursor-pointer"
                   title="Clear search"
                 >
@@ -326,7 +464,7 @@ export function ShopCatalog({
         <div className="flex flex-wrap items-center justify-between gap-3 mb-7 text-xs text-[#7A6451] px-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-sans font-medium text-[#4A392A]">
-              Showing <span className="font-semibold text-[#1C2820]">{sortedProducts.length}</span> {sortedProducts.length === 1 ? "product" : "products"}
+              Showing <span className="font-semibold text-[#1C2820]">{products.length}</span> {products.length === 1 ? "product" : "products"}
             </span>
 
             {/* Active Category Chip */}
@@ -350,7 +488,10 @@ export function ShopCatalog({
                 <span>Search: &ldquo;{searchQuery}&rdquo;</span>
                 <button
                   type="button"
-                  onClick={() => setSearchQuery("")}
+                  onClick={() => {
+                    setSearchQuery("");
+                    setDebouncedQuery("");
+                  }}
                   className="hover:text-red-700 cursor-pointer font-bold ml-1 text-sm leading-none"
                   title="Clear search"
                 >
@@ -372,10 +513,38 @@ export function ShopCatalog({
           </div>
         </div>
 
-        {/* Product Grid - Full Width Responsive */}
-        {sortedProducts.length > 0 ? (
+        {/* Product Grid / Loading State / Error State / Empty State */}
+        {isLoading ? (
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 lg:gap-6">
-            {sortedProducts.map((product) => (
+            {[...Array(10)].map((_, i) => (
+              <div key={i} className="flex flex-col justify-between animate-pulse">
+                <div className="w-full aspect-[4/3] rounded-2xl bg-[#EFE7DC] border border-[#DFCBB8]/60" />
+                <div className="pt-3 pb-1 space-y-2">
+                  <div className="h-4 bg-[#EFE7DC] rounded-md w-4/5" />
+                  <div className="h-3 bg-[#EFE7DC] rounded-md w-1/3" />
+                  <div className="h-4 bg-[#EFE7DC] rounded-md w-1/2" />
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : error ? (
+          <div className="text-center py-16 px-4 bg-[#FAF7F2] border border-[#DFCBB8]/70 rounded-2xl">
+            <div className="text-[#B88746] text-3xl mb-3">🪷</div>
+            <h3 className="font-serif text-lg text-[#35271D]">Unable to load products</h3>
+            <p className="text-xs text-[#7E6955] mt-1 max-w-sm mx-auto">
+              {error}
+            </p>
+            <button
+              type="button"
+              onClick={handleResetFilters}
+              className="mt-4 px-5 py-2 rounded-full bg-[#1E2721] text-stone-100 text-xs font-sans tracking-wide hover:bg-[#2F3E34] transition-colors cursor-pointer"
+            >
+              Retry
+            </button>
+          </div>
+        ) : products.length > 0 ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5 gap-4 sm:gap-5 lg:gap-6">
+            {products.map((product) => (
               <ShopProductCard key={product.id} product={product} />
             ))}
           </div>
@@ -397,7 +566,7 @@ export function ShopCatalog({
         )}
 
         {/* Bottom Ornate Divider & Action Button */}
-        {sortedProducts.length > 0 && (
+        {!isLoading && !error && products.length > 0 && (
           <div className="mt-14 pt-8 border-t border-[#E8DCCF]/80 flex flex-col items-center space-y-4">
             <div className="flex items-center justify-center space-x-3 text-[#B88746] w-full">
               <div className="h-[1px] flex-1 max-w-[120px] sm:max-w-[200px] bg-[#DFCBB8]" />

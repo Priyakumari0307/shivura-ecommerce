@@ -9,14 +9,28 @@ import { Container } from "@/components/ui/Container";
 import { MobileNav } from "./MobileNav";
 import { ShopDropdown } from "./ShopDropdown";
 import { useShop } from "@/context/ShopContext";
+import { useAuth } from "@/context/AuthContext";
 
 export function Header() {
   const pathname = usePathname();
-  const { wishlistCount, cartCount } = useShop();
+  const { wishlistCount, cartCount, showToast } = useShop();
+  const { user, isAuthenticated, logout } = useAuth();
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const [shopDropdownOpen, setShopDropdownOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const userMenuRef = useRef<HTMLDivElement>(null);
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(e.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
 
   useEffect(() => {
     const handleScroll = () => {
@@ -38,6 +52,11 @@ export function Header() {
       setShopDropdownOpen(false);
     }, 150);
   };
+
+  // Do not render consumer header in CRM
+  if (pathname?.startsWith("/CRM") || pathname?.startsWith("/crm")) {
+    return null;
+  }
 
   return (
     <>
@@ -174,28 +193,146 @@ export function Header() {
 
             {/* Right: User Login, Wishlist & Cart Action Icons */}
             <div className="flex items-center space-x-3.5 sm:space-x-4.5">
-              {/* Account / Login Icon */}
-              <Link
-                href="/login"
-                className="text-neutral-700 hover:text-neutral-900 p-1.5 transition-colors relative flex items-center cursor-pointer"
-                aria-label="Account Login and Sign Up"
-                title="Account / Sign In"
-              >
-                <svg
-                  xmlns="http://www.w3.org/2000/svg"
-                  width="19"
-                  height="19"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.6"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
+              {/* Account / Login or Profile Dropdown */}
+              {isAuthenticated && user ? (
+                <div className="relative" ref={userMenuRef}>
+                  <button
+                    type="button"
+                    onClick={() => setUserMenuOpen(!userMenuOpen)}
+                    className="flex items-center space-x-1.5 p-1 rounded-full text-neutral-800 hover:text-neutral-900 focus:outline-none cursor-pointer"
+                    aria-label="User Account Menu"
+                    aria-expanded={userMenuOpen}
+                  >
+                    <div className="w-7 h-7 rounded-full bg-[#1C2820] text-[#FAF5EB] flex items-center justify-center text-xs font-serif font-medium shadow-xs">
+                      {user.name ? user.name.charAt(0).toUpperCase() : "U"}
+                    </div>
+                    <svg
+                      xmlns="http://www.w3.org/2000/svg"
+                      width="11"
+                      height="11"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      className={`text-neutral-500 transition-transform duration-200 hidden sm:block ${
+                        userMenuOpen ? "rotate-180" : ""
+                      }`}
+                    >
+                      <polyline points="6 9 12 15 18 9"></polyline>
+                    </svg>
+                  </button>
+
+                  {/* Luxury Dropdown Menu */}
+                  {userMenuOpen && (
+                    <div className="absolute right-0 mt-2 w-56 rounded-2xl bg-[#FAF8F5] border border-[#DFCBB8] shadow-xl py-2 z-50 animate-in fade-in slide-in-from-top-2 duration-150">
+                      <div className="px-4 py-2.5 border-b border-[#DFCBB8]/60">
+                        <p className="text-[10.5px] font-sans text-[#B88746] uppercase tracking-wider font-semibold">
+                          ✦ Shivura Circle ✦
+                        </p>
+                        <p className="font-serif text-sm text-[#2C2117] font-medium truncate pt-0.5">
+                          {user.name || "Member"}
+                        </p>
+                        <p className="text-[11px] text-[#7E6955] truncate font-light">
+                          {user.email}
+                        </p>
+                      </div>
+
+                      <div className="py-1">
+                        <Link
+                          href="/wishlist"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center justify-between px-4 py-2 text-xs text-[#3A2A1E] hover:bg-[#FAF7F2] hover:text-[#B88746] transition-colors"
+                        >
+                          <span>My Wishlist</span>
+                          <span className="text-[11px] font-semibold text-rose-600">
+                            ({wishlistCount})
+                          </span>
+                        </Link>
+                        <Link
+                          href="/cart"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center justify-between px-4 py-2 text-xs text-[#3A2A1E] hover:bg-[#FAF7F2] hover:text-[#B88746] transition-colors"
+                        >
+                          <span>My Shopping Cart</span>
+                          <span className="text-[11px] font-semibold text-[#1C2820]">
+                            ({cartCount})
+                          </span>
+                        </Link>
+                        <Link
+                          href="/account/orders"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="flex items-center justify-between px-4 py-2 text-xs text-[#3A2A1E] hover:bg-[#FAF7F2] hover:text-[#B88746] transition-colors"
+                        >
+                          <span>My Orders</span>
+                          <span className="text-[10px] uppercase tracking-wider font-semibold text-[#B88746]">
+                            View History
+                          </span>
+                        </Link>
+                        <Link
+                          href="/contact"
+                          onClick={() => setUserMenuOpen(false)}
+                          className="block px-4 py-2 text-xs text-[#3A2A1E] hover:bg-[#FAF7F2] hover:text-[#B88746] transition-colors"
+                        >
+                          Concierge &amp; Support
+                        </Link>
+                      </div>
+
+                      <div className="pt-1 border-t border-[#DFCBB8]/60">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            setUserMenuOpen(false);
+                            await logout();
+                            showToast("You have been signed out safely. You may continue browsing.", "info");
+                          }}
+                          className="w-full text-left px-4 py-2 text-xs text-rose-700 hover:bg-rose-50/70 font-medium transition-colors cursor-pointer flex items-center justify-between"
+                        >
+                          <span>Sign Out</span>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                          >
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <Link
+                  href="/login"
+                  className="text-neutral-700 hover:text-neutral-900 p-1.5 transition-colors relative flex items-center cursor-pointer"
+                  aria-label="Account Login and Sign Up"
+                  title="Account / Sign In"
                 >
-                  <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
-                  <circle cx="12" cy="7" r="4"></circle>
-                </svg>
-              </Link>
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="19"
+                    height="19"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="1.6"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="12" cy="7" r="4"></circle>
+                  </svg>
+                </Link>
+              )}
 
               {/* Wishlist Heart Icon */}
               <Link

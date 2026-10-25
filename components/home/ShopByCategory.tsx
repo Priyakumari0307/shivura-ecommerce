@@ -60,22 +60,65 @@ function getCategoryHref(cat: CategoryItem): string {
   return `/shop?category=${encodeURIComponent(cat.slug)}`;
 }
 
-export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryProps) {
+export function ShopByCategory({ categories: initialCategories }: ShopByCategoryProps) {
+  const [fetchedCategories, setFetchedCategories] = useState<CategoryItem[] | null>(null);
+  const categories = initialCategories || fetchedCategories || CATEGORIES_DATA;
+
   const scrollContainerRef = useRef<HTMLDivElement>(null);
   const [canScrollLeft, setCanScrollLeft] = useState(false);
   const [canScrollRight, setCanScrollRight] = useState(false);
+  const [isScrollable, setIsScrollable] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+
+  const isMouseDownRef = useRef(false);
+  const startXRef = useRef(0);
+  const scrollLeftRef = useRef(0);
+  const hasDraggedRef = useRef(false);
+
+  // Graceful client fallback to public categories API if no categories were provided
+  useEffect(() => {
+    if (!initialCategories) {
+      let isMounted = true;
+      fetch("/api/categories")
+        .then((res) => (res.ok ? res.json() : null))
+        .then((json) => {
+          if (isMounted && json?.data && Array.isArray(json.data) && json.data.length > 0) {
+            setFetchedCategories(json.data);
+          }
+        })
+        .catch(() => {});
+      return () => {
+        isMounted = false;
+      };
+    }
+  }, [initialCategories]);
 
   const checkScroll = useCallback(() => {
     if (!scrollContainerRef.current) return;
     const { scrollLeft, scrollWidth, clientWidth } = scrollContainerRef.current;
-    setCanScrollLeft(scrollLeft > 2);
-    setCanScrollRight(scrollLeft < scrollWidth - clientWidth - 2);
+    const maxScroll = scrollWidth - clientWidth;
+    const scrollable = maxScroll > 4;
+    setIsScrollable(scrollable);
+    setCanScrollLeft(scrollLeft > 4);
+    setCanScrollRight(scrollLeft < maxScroll - 4);
   }, []);
 
   useEffect(() => {
     checkScroll();
+    const container = scrollContainerRef.current;
+    if (!container) return;
+
+    let resizeObserver: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== "undefined") {
+      resizeObserver = new ResizeObserver(() => {
+        checkScroll();
+      });
+      resizeObserver.observe(container);
+    }
+
     window.addEventListener("resize", checkScroll);
     return () => {
+      if (resizeObserver) resizeObserver.disconnect();
       window.removeEventListener("resize", checkScroll);
     };
   }, [checkScroll, categories]);
@@ -88,10 +131,43 @@ export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryP
       left: direction === "left" ? -scrollAmount : scrollAmount,
       behavior: "smooth",
     });
+    setTimeout(checkScroll, 350);
+  };
+
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (e.button !== 0 || !scrollContainerRef.current) return;
+    isMouseDownRef.current = true;
+    hasDraggedRef.current = false;
+    startXRef.current = e.pageX - scrollContainerRef.current.offsetLeft;
+    scrollLeftRef.current = scrollContainerRef.current.scrollLeft;
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (!isMouseDownRef.current || !scrollContainerRef.current) return;
+    const x = e.pageX - scrollContainerRef.current.offsetLeft;
+    const delta = x - startXRef.current;
+    if (Math.abs(delta) > 5) {
+      if (!isDragging) setIsDragging(true);
+      hasDraggedRef.current = true;
+    }
+    if (hasDraggedRef.current) {
+      e.preventDefault();
+      scrollContainerRef.current.scrollLeft = scrollLeftRef.current - delta;
+    }
+  };
+
+  const handleMouseUpOrLeave = () => {
+    if (!isMouseDownRef.current) return;
+    isMouseDownRef.current = false;
+    setIsDragging(false);
+    setTimeout(() => {
+      hasDraggedRef.current = false;
+      checkScroll();
+    }, 50);
   };
 
   return (
-    <section className="py-7 sm:py-10 bg-[#FAF8F5] border-b border-stone-200/60">
+    <section className="w-full overflow-hidden py-7 sm:py-10 bg-[#FAF8F5] border-b border-stone-200/60">
       <Container size="wide">
         {/* Section Heading */}
         <div className="text-center mb-6 sm:mb-8">
@@ -103,20 +179,21 @@ export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryP
 
         {/* Carousel Slider with Navigation Arrows */}
         <div className="relative group/carousel max-w-6xl mx-auto px-2 sm:px-6">
-          {/* Left Arrow Button */}
+          {/* Left Arrow Button (Desktop / Tablet) */}
           <button
             type="button"
             onClick={() => scroll("left")}
             disabled={!canScrollLeft}
             aria-label="Previous categories"
+            aria-disabled={!canScrollLeft}
             className={cn(
-              "absolute -left-2 sm:-left-3 lg:-left-5 top-14 sm:top-18 lg:top-20 -translate-y-1/2 z-20",
+              "hidden sm:flex absolute -left-2 sm:-left-3 lg:-left-5 top-14 sm:top-18 lg:top-20 -translate-y-1/2 z-20",
               "w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/95 border border-stone-300/80 shadow-md shadow-stone-900/5",
-              "flex items-center justify-center text-neutral-700 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 hover:shadow-lg",
+              "items-center justify-center text-neutral-700",
               "transition-all duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-800",
               !canScrollLeft
-                ? "opacity-0 pointer-events-none cursor-not-allowed scale-90"
-                : "opacity-100 hover:scale-105 active:scale-95 cursor-pointer"
+                ? "opacity-35 cursor-not-allowed border-stone-200 text-stone-300 bg-white/60 shadow-none"
+                : "opacity-100 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 hover:shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
             )}
           >
             <svg
@@ -134,20 +211,21 @@ export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryP
             </svg>
           </button>
 
-          {/* Right Arrow Button */}
+          {/* Right Arrow Button (Desktop / Tablet) */}
           <button
             type="button"
             onClick={() => scroll("right")}
             disabled={!canScrollRight}
             aria-label="Next categories"
+            aria-disabled={!canScrollRight}
             className={cn(
-              "absolute -right-2 sm:-right-3 lg:-right-5 top-14 sm:top-18 lg:top-20 -translate-y-1/2 z-20",
+              "hidden sm:flex absolute -right-2 sm:-right-3 lg:-right-5 top-14 sm:top-18 lg:top-20 -translate-y-1/2 z-20",
               "w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-white/95 border border-stone-300/80 shadow-md shadow-stone-900/5",
-              "flex items-center justify-center text-neutral-700 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 hover:shadow-lg",
+              "items-center justify-center text-neutral-700",
               "transition-all duration-300 ease-out focus:outline-none focus-visible:ring-2 focus-visible:ring-neutral-800",
               !canScrollRight
-                ? "opacity-0 pointer-events-none cursor-not-allowed scale-90"
-                : "opacity-100 hover:scale-105 active:scale-95 cursor-pointer"
+                ? "opacity-35 cursor-not-allowed border-stone-200 text-stone-300 bg-white/60 shadow-none"
+                : "opacity-100 hover:text-white hover:bg-neutral-900 hover:border-neutral-900 hover:shadow-lg hover:scale-105 active:scale-95 cursor-pointer"
             )}
           >
             <svg
@@ -169,13 +247,26 @@ export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryP
           <div
             ref={scrollContainerRef}
             onScroll={checkScroll}
-            className="overflow-x-auto scroll-smooth py-3 px-2 sm:px-4 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+            onMouseDown={handleMouseDown}
+            onMouseMove={handleMouseMove}
+            onMouseUp={handleMouseUpOrLeave}
+            onMouseLeave={handleMouseUpOrLeave}
+            className={cn(
+              "overflow-x-auto py-3 px-2 sm:px-4 no-scrollbar [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden",
+              isDragging ? "cursor-grabbing select-none" : isScrollable ? "cursor-grab" : ""
+            )}
             style={{
-              scrollSnapType: "x proximity",
+              scrollSnapType: isDragging ? "none" : "x proximity",
+              scrollBehavior: isDragging ? "auto" : "smooth",
               WebkitOverflowScrolling: "touch",
             }}
           >
-            <div className="flex items-start gap-6 sm:gap-8 lg:gap-10 w-fit min-w-full justify-start sm:justify-center mx-auto">
+            <div
+              className={cn(
+                "flex items-start gap-6 sm:gap-8 lg:gap-10 w-fit min-w-full",
+                isScrollable ? "justify-start" : "justify-start sm:justify-center mx-auto"
+              )}
+            >
               {categories.map((cat) => {
                 const image = cat.image || cat.imageSrc;
                 const href = getCategoryHref(cat);
@@ -184,7 +275,17 @@ export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryP
                   <Link
                     key={cat.id}
                     href={href}
-                    className="group flex flex-col items-center text-center space-y-3 shrink-0 focus:outline-none"
+                    onClick={(e) => {
+                      if (hasDraggedRef.current) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                      }
+                    }}
+                    draggable={false}
+                    className={cn(
+                      "group flex flex-col items-center text-center space-y-3 shrink-0 focus:outline-none select-none",
+                      isDragging ? "cursor-grabbing" : "cursor-pointer"
+                    )}
                     style={{ scrollSnapAlign: "center" }}
                   >
                     {/* Circular Avatar / Image Container */}
@@ -195,11 +296,12 @@ export function ShopByCategory({ categories = CATEGORIES_DATA }: ShopByCategoryP
                           alt={cat.name}
                           fill
                           sizes="(max-width: 640px) 112px, (max-width: 1024px) 144px, 160px"
-                          className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
+                          className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out pointer-events-none select-none"
+                          draggable={false}
                         />
                       ) : (
                         /* Blank Aesthetic Placeholder */
-                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-stone-100 via-stone-200/60 to-stone-100 text-neutral-400 group-hover:text-neutral-700 transition-colors">
+                        <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-stone-100 via-stone-200/60 to-stone-100 text-neutral-400 group-hover:text-neutral-700 transition-colors pointer-events-none select-none">
                           <svg
                             xmlns="http://www.w3.org/2000/svg"
                             width="28"
