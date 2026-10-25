@@ -54,16 +54,7 @@ export default function CategoriesManagementClient({
 }: CategoriesManagementClientProps = {}) {
   // Navigation tab state initialized to the provided type
   const [activeTab, setActiveTab] = useState<ActiveTab>(type);
-
-  // Sync activeTab when type prop changes
-  useEffect(() => {
-    setActiveTab(type);
-    setCurrentPage(1);
-    setSearchTerm("");
-    setDebouncedSearch("");
-    setStatusFilter("all");
-    setSortOrder("sortorder-asc");
-  }, [type]);
+  const [prevType, setPrevType] = useState<ActiveTab>(type);
 
   // Data states
   const [records, setRecords] = useState<TaxonomyRecord[]>([]);
@@ -88,6 +79,17 @@ export default function CategoriesManagementClient({
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "inactive">("all");
   const [sortOrder, setSortOrder] = useState("sortorder-asc");
   const [currentPage, setCurrentPage] = useState(1);
+
+  // Sync state when type prop changes
+  if (prevType !== type) {
+    setPrevType(type);
+    setActiveTab(type);
+    setCurrentPage(1);
+    setSearchTerm("");
+    setDebouncedSearch("");
+    setStatusFilter("all");
+    setSortOrder("sortorder-asc");
+  }
 
   // UI status states
   const [isLoading, setIsLoading] = useState(true);
@@ -178,15 +180,6 @@ export default function CategoriesManagementClient({
     return () => clearTimeout(timer);
   }, [searchTerm]);
 
-  // Reset pagination on tab change
-  const handleTabChange = (tab: ActiveTab) => {
-    setActiveTab(tab);
-    setCurrentPage(1);
-    setSearchTerm("");
-    setDebouncedSearch("");
-    setStatusFilter("all");
-    setSortOrder("sortorder-asc");
-  };
 
   // Fetch records
   const fetchRecords = useCallback(async () => {
