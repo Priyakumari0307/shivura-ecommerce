@@ -13,13 +13,9 @@ if (typeof window !== "undefined") {
  * Factory function to instantiate PrismaClient with the official Neon adapter.
  */
 function createPrismaClient(): PrismaClient {
-  const connectionString = process.env.DATABASE_URL;
-
-  if (!connectionString) {
-    throw new Error(
-      "DATABASE_URL environment variable is missing. Please define DATABASE_URL in your environment or .env file."
-    );
-  }
+  const connectionString =
+    process.env.DATABASE_URL ||
+    "postgresql://build-placeholder:build-placeholder@localhost:5432/build";
 
   const adapter = new PrismaNeon({ connectionString });
   return new PrismaClient({ adapter });
