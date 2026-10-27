@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
@@ -12,10 +12,14 @@ interface BestSellersProps {
   products?: Product[];
 }
 
+const ITEMS_PER_PAGE = 4;
+
 export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersProps) {
   const { isWishlisted, toggleWishlist, addToCart } = useShop();
   const [sortBy, setSortBy] = useState<string>("default");
+  const [currentPage, setCurrentPage] = useState<number>(1);
   const [addedItems, setAddedItems] = useState<Record<string, boolean>>({});
+  const sectionRef = useRef<HTMLElement>(null);
 
   const handleToggleWishlist = (product: Product, e: React.MouseEvent) => {
     e.preventDefault();
@@ -33,6 +37,11 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
     }, 1800);
   };
 
+  const handleSortChange = (newSort: string) => {
+    setSortBy(newSort);
+    setCurrentPage(1);
+  };
+
   const sortedProducts = useMemo(() => {
     const list = [...products];
     if (sortBy === "price-low") {
@@ -47,11 +56,31 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
     return list;
   }, [products, sortBy]);
 
+  const totalPages = Math.max(1, Math.ceil(sortedProducts.length / ITEMS_PER_PAGE));
+
+  // 4 products per section / page
+  const currentProducts = useMemo(() => {
+    const start = (currentPage - 1) * ITEMS_PER_PAGE;
+    return sortedProducts.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedProducts, currentPage]);
+
+  const handlePageChange = (newPage: number) => {
+    if (newPage < 1 || newPage > totalPages || newPage === currentPage) return;
+    setCurrentPage(newPage);
+    if (sectionRef.current) {
+      sectionRef.current.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
+  };
+
   return (
-    <section className="py-10 sm:py-14 lg:py-16 bg-[#FAF8F5] border-b border-stone-200/60">
+    <section
+      id="best-sellers-section"
+      ref={sectionRef}
+      className="py-10 sm:py-14 lg:py-16 bg-[#FAF8F5] border-b border-stone-200/60 scroll-mt-14"
+    >
       <Container size="wide">
         {/* Section Header with Decorative Lines and Lotus Motif */}
-        <div className="relative mb-8 sm:mb-10">
+        <div className="relative mb-6 sm:mb-10">
           {/* Top Row: Decorative Line + Best Sellers Title + Decorative Line */}
           <div className="flex items-center justify-center space-x-4 sm:space-x-8">
             <div className="h-[1px] bg-[#D4C3B2] flex-1 max-w-[120px] sm:max-w-[200px] md:max-w-[260px]" />
@@ -73,17 +102,11 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
                 className="w-5 h-4 text-[#B88746]"
                 aria-hidden="true"
               >
-                {/* Center petal */}
                 <path d="M16 1 C14.5 5, 14.5 10, 16 14 C17.5 10, 17.5 5, 16 1 Z" opacity="0.95" />
-                {/* Left inner petal */}
                 <path d="M15 4 C11 7, 10.5 12, 15.5 14 C13.5 11, 13.5 7, 15 4 Z" opacity="0.9" />
-                {/* Right inner petal */}
                 <path d="M17 4 C21 7, 21.5 12, 16.5 14 C18.5 11, 18.5 7, 17 4 Z" opacity="0.9" />
-                {/* Left outer petal */}
                 <path d="M13.5 7 C8.5 10, 8 14.5, 14.5 15 C11 13.5, 10.5 10.5, 13.5 7 Z" opacity="0.8" />
-                {/* Right outer petal */}
                 <path d="M18.5 7 C23.5 10, 24 14.5, 17.5 15 C21 13.5, 21.5 10.5, 18.5 7 Z" opacity="0.8" />
-                {/* Base curve */}
                 <path d="M11 15.5 C14 17, 18 17, 21 15.5 C19 16.5, 13 16.5, 11 15.5 Z" opacity="0.95" />
               </svg>
             </div>
@@ -99,7 +122,7 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
               <select
                 id="best-seller-sort"
                 value={sortBy}
-                onChange={(e) => setSortBy(e.target.value)}
+                onChange={(e) => handleSortChange(e.target.value)}
                 className="appearance-none bg-white/70 hover:bg-white border border-[#D5C4B4] rounded-full px-3.5 py-1.5 pr-7 text-xs font-sans text-[#4A392A] focus:outline-none focus:ring-1 focus:ring-[#B88746] focus:border-[#B88746] shadow-2xs cursor-pointer transition-colors"
               >
                 <option value="default">Default</option>
@@ -121,9 +144,9 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
           </div>
         </div>
 
-        {/* Product Cards Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 sm:gap-6 lg:gap-7">
-          {sortedProducts.map((product) => {
+        {/* Product Cards Grid: 2 columns on mobile, 2 sm, 4 lg */}
+        <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-6 lg:gap-7">
+          {currentProducts.map((product) => {
             const isLiked = isWishlisted(product.id);
             const isAdded = !!addedItems[product.id];
 
@@ -136,19 +159,19 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
                   {/* Image Container with Badge & Wishlist Heart */}
                   <Link
                     href={product.href}
-                    className="relative block aspect-[4/3] rounded-2xl overflow-hidden bg-[#F2ECE4] border border-stone-200/80 shadow-2xs group-hover:shadow-md transition-all duration-300 focus:outline-none"
+                    className="relative block aspect-[4/3] rounded-xl sm:rounded-2xl overflow-hidden bg-[#F2ECE4] border border-stone-200/80 shadow-2xs group-hover:shadow-md transition-all duration-300 focus:outline-none"
                   >
                     <Image
                       src={product.imageSrc}
                       alt={product.name}
                       fill
-                      sizes="(max-width: 640px) 100vw, (max-width: 1024px) 50vw, 25vw"
+                      sizes="(max-width: 640px) 50vw, (max-width: 1024px) 50vw, 25vw"
                       className="object-cover group-hover:scale-105 transition-transform duration-500 ease-out"
                     />
 
                     {/* Top-Left 'New' Badge */}
                     {product.isNew && (
-                      <div className="absolute top-3 left-3 bg-[#B58544] text-white text-[11px] font-sans font-medium px-2.5 py-0.5 rounded-full shadow-xs tracking-wide pointer-events-none">
+                      <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-[#B58544] text-white text-[9.5px] sm:text-[11px] font-sans font-medium px-2 sm:px-2.5 py-0.5 rounded-full shadow-xs tracking-wide pointer-events-none">
                         New
                       </div>
                     )}
@@ -158,10 +181,10 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
                       type="button"
                       onClick={(e) => handleToggleWishlist(product, e)}
                       aria-label={isLiked ? "Remove from wishlist" : "Add to wishlist"}
-                      className={`absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-[2px] cursor-pointer ${
+                      className={`absolute top-2 right-2 sm:top-3 sm:right-3 w-6 h-6 sm:w-7 sm:h-7 rounded-full flex items-center justify-center transition-all duration-200 backdrop-blur-[2px] cursor-pointer ${
                         isLiked
                           ? "bg-white text-rose-600 shadow-sm"
-                          : "bg-black/15 text-white hover:bg-black/35 hover:scale-110"
+                          : "bg-white/80 hover:bg-white text-stone-700 hover:text-rose-600 hover:scale-110 shadow-xs"
                       }`}
                     >
                       <svg
@@ -172,7 +195,7 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
                         strokeWidth="1.75"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="w-4 h-4"
+                        className="w-3.5 h-3.5 sm:w-4 sm:h-4"
                       >
                         <path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z" />
                       </svg>
@@ -180,29 +203,29 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
                   </Link>
 
                   {/* Product Information */}
-                  <div className="pt-3.5 pb-1 space-y-1.5">
+                  <div className="pt-2 sm:pt-3.5 pb-1 space-y-1 sm:space-y-1.5">
                     {/* Title */}
                     <Link
                       href={product.href}
-                      className="block font-serif text-[13.5px] sm:text-[14px] text-[#33251A] font-normal leading-[1.38] line-clamp-2 min-h-[38px] group-hover:text-[#8E531A] transition-colors focus:outline-none"
+                      className="block font-serif text-xs sm:text-[14px] text-[#33251A] font-normal leading-[1.38] line-clamp-2 min-h-[34px] sm:min-h-[38px] group-hover:text-[#8E531A] transition-colors focus:outline-none"
                     >
                       {product.name}
                     </Link>
 
                     {/* Prices */}
-                    <div className="flex items-center space-x-2 pt-0.5">
+                    <div className="flex flex-wrap items-baseline gap-1 sm:gap-2 pt-0.5">
                       {product.originalPrice && (
-                        <span className="text-[#8F8175] line-through text-xs font-light">
+                        <span className="text-[#8F8175] line-through text-[10.5px] sm:text-xs font-light">
                           ₹{product.originalPrice.toFixed(2)}
                         </span>
                       )}
-                      <span className="font-semibold text-[#281E15] text-sm sm:text-[14.5px]">
+                      <span className="font-semibold text-[#281E15] text-xs sm:text-[14.5px]">
                         ₹{product.price.toFixed(2)}
                       </span>
                     </div>
 
                     {/* Star Ratings & Reviews Count */}
-                    <div className="min-h-[20px] flex items-center">
+                    <div className="min-h-[16px] sm:min-h-[20px] flex items-center">
                       {product.rating ? (
                         <div className="flex items-center space-x-1">
                           <div className="flex text-[#C89438] space-x-0.5">
@@ -214,79 +237,147 @@ export function BestSellers({ products = BEST_SELLERS_PRODUCTS }: BestSellersPro
                                 fill={i < Math.floor(product.rating || 0) ? "currentColor" : "none"}
                                 stroke="currentColor"
                                 strokeWidth="1"
-                                className="w-3.5 h-3.5 fill-[#C89438]"
+                                className="w-3 h-3 sm:w-3.5 sm:h-3.5 fill-[#C89438]"
                               >
                                 <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
                               </svg>
                             ))}
                           </div>
                           {product.reviewCount && (
-                            <span className="text-xs text-[#7A6451] font-sans font-light">
+                            <span className="text-[10px] sm:text-xs text-[#7A6451] font-sans font-light">
                               ({product.reviewCount})
                             </span>
                           )}
                         </div>
                       ) : (
-                        <div className="h-4" />
+                        <div className="h-3 sm:h-4" />
                       )}
                     </div>
                   </div>
                 </div>
 
-                {/* Add to Bag Button */}
+                {/* Add to Bag Button: styled matching user's mockup in Image 2 */}
                 <button
                   type="button"
                   onClick={(e) => handleAddToCart(product, e)}
-                  className={`w-full mt-3 py-2.5 px-4 rounded-full font-sans text-xs sm:text-[13px] font-medium flex items-center justify-center space-x-2 transition-all duration-200 shadow-2xs active:scale-[0.98] cursor-pointer ${
+                  className={`w-full mt-2 sm:mt-3 py-2 sm:py-2.5 px-3 rounded-md sm:rounded-full font-serif sm:font-sans text-xs sm:text-[13px] font-normal sm:font-medium flex items-center justify-center space-x-1.5 transition-all duration-200 shadow-2xs active:scale-[0.98] cursor-pointer ${
                     isAdded
                       ? "bg-[#8E531A] text-stone-50"
-                      : "bg-[#EFE4D6] hover:bg-[#E5D5C4] text-[#4A392C]"
+                      : "bg-[#E8DCCF] hover:bg-[#DFCDBB] text-[#4A392C]"
                   }`}
                 >
                   {isAdded ? (
                     <>
                       <svg
                         xmlns="http://www.w3.org/2000/svg"
-                        width="15"
-                        height="15"
+                        width="14"
+                        height="14"
                         viewBox="0 0 24 24"
                         fill="none"
                         stroke="currentColor"
                         strokeWidth="2"
                         strokeLinecap="round"
                         strokeLinejoin="round"
-                        className="text-stone-50"
+                        className="text-stone-50 shrink-0"
                       >
                         <polyline points="20 6 9 17 4 12"></polyline>
                       </svg>
                       <span>Added to Bag</span>
                     </>
                   ) : (
-                    <>
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="15"
-                        height="15"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="1.75"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        className="text-[#4A392C]"
-                      >
-                        <path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z" />
-                        <path d="M3 6h18" />
-                        <path d="M16 10a4 4 0 0 1-8 0" />
-                      </svg>
-                      <span>Add to bag</span>
-                    </>
+                    <span>Add to bag</span>
                   )}
                 </button>
               </div>
             );
           })}
         </div>
+
+        {/* Pagination: < 1 2 3 > styled exactly like Image 2 */}
+        {totalPages > 1 && (
+          <nav
+            aria-label="Best sellers pagination"
+            className="flex items-center justify-center space-x-5 sm:space-x-7 mt-8 sm:mt-12 select-none"
+          >
+            {/* Prev Arrow */}
+            <button
+              type="button"
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1}
+              aria-label="Previous page"
+              className={`p-1.5 transition-colors cursor-pointer ${
+                currentPage <= 1
+                  ? "text-stone-300 cursor-not-allowed pointer-events-none"
+                  : "text-[#3A2A1E] hover:text-[#8E531A]"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4 sm:w-[18px] sm:h-[18px]"
+              >
+                <polyline points="15 18 9 12 15 6"></polyline>
+              </svg>
+            </button>
+
+            {/* Page Numbers */}
+            <div className="flex items-center space-x-3 sm:space-x-4">
+              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pageNum) => {
+                const isActive = pageNum === currentPage;
+                return (
+                  <button
+                    key={pageNum}
+                    type="button"
+                    onClick={() => handlePageChange(pageNum)}
+                    aria-current={isActive ? "page" : undefined}
+                    className={`font-serif text-sm sm:text-base px-1.5 py-0.5 transition-all cursor-pointer ${
+                      isActive
+                        ? "text-[#2C2117] font-semibold border-b-2 border-[#2C2117]"
+                        : "text-[#7A6451] hover:text-[#2C2117] border-b-2 border-transparent"
+                    }`}
+                  >
+                    {pageNum}
+                  </button>
+                );
+              })}
+            </div>
+
+            {/* Next Arrow */}
+            <button
+              type="button"
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages}
+              aria-label="Next page"
+              className={`p-1.5 transition-colors cursor-pointer ${
+                currentPage >= totalPages
+                  ? "text-stone-300 cursor-not-allowed pointer-events-none"
+                  : "text-[#3A2A1E] hover:text-[#8E531A]"
+              }`}
+            >
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="18"
+                height="18"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className="w-4 h-4 sm:w-[18px] sm:h-[18px]"
+              >
+                <polyline points="9 18 15 12 9 6"></polyline>
+              </svg>
+            </button>
+          </nav>
+        )}
       </Container>
     </section>
   );

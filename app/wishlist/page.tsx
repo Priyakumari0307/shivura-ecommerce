@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import Link from "next/link";
 import { Container } from "@/components/ui/Container";
@@ -11,18 +11,27 @@ import { useAuth } from "@/context/AuthContext";
 export default function WishlistPage() {
   const { wishlist, removeFromWishlist, addToCart } = useShop();
   const { isAuthenticated } = useAuth();
+  const [addingId, setAddingId] = useState<string | null>(null);
+
+  const handleAddToCart = (product: any) => {
+    setAddingId(product.id);
+    addToCart(product, 1);
+    setTimeout(() => {
+      setAddingId(null);
+    }, 1200);
+  };
 
   return (
-    <div className="py-12 sm:py-16 bg-[#FAF8F5] min-h-[75vh]">
+    <div className="py-8 sm:py-16 bg-[#FAF8F5] min-h-[75vh]">
       <Container size="wide">
         {/* Header */}
-        <div className="text-center space-y-2.5 mb-10">
-          <div className="inline-flex items-center space-x-2 text-[#B88746] text-xs uppercase tracking-widest font-sans font-medium">
-            <span>✦</span>
+        <div className="text-center space-y-2 mb-6 sm:mb-10">
+          <div className="inline-flex items-center space-x-2 text-[#B88746] text-[11px] sm:text-xs uppercase tracking-widest font-sans font-medium">
+            <span>✧</span>
             <span>Your Curated Favorites</span>
-            <span>✦</span>
+            <span>✧</span>
           </div>
-          <h1 className="font-serif text-3xl sm:text-4xl text-[#2C2117]">
+          <h1 className="font-serif text-2xl sm:text-4xl text-[#2C2117]">
             My Wishlist
           </h1>
           <p className="text-xs sm:text-sm text-[#7E6955] font-light">
@@ -32,12 +41,12 @@ export default function WishlistPage() {
 
         {wishlist.length > 0 ? (
           <div>
-            {/* Wishlist Items Grid */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
+            {/* Wishlist Items Grid: 2 columns on mobile, 2 sm, 3 md, 4 lg */}
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3 sm:gap-5 lg:gap-6">
               {wishlist.map((product) => (
                 <div
                   key={product.id}
-                  className="bg-white rounded-2xl border border-[#DFCBB8]/70 overflow-hidden shadow-2xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
+                  className="bg-white rounded-xl sm:rounded-2xl border border-[#DFCBB8]/70 overflow-hidden shadow-2xs hover:shadow-md transition-all duration-300 flex flex-col justify-between"
                 >
                   <div>
                     {/* Image Area */}
@@ -46,10 +55,11 @@ export default function WishlistPage() {
                         src={product.imageSrc}
                         alt={product.name}
                         fill
+                        sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
                         className="object-cover hover:scale-105 transition-transform duration-500"
                       />
                       {product.badge && (
-                        <div className="absolute top-3 left-3 bg-[#1C2820]/90 text-[#FAF5EB] text-[10.5px] font-sans font-medium px-2.5 py-0.5 rounded-full">
+                        <div className="absolute top-2 left-2 sm:top-3 sm:left-3 bg-[#1C2820]/90 text-[#FAF5EB] text-[9.5px] sm:text-[10.5px] font-sans font-medium px-2 sm:px-2.5 py-0.5 rounded-full pointer-events-none">
                           {product.badge}
                         </div>
                       )}
@@ -57,17 +67,21 @@ export default function WishlistPage() {
                       <button
                         type="button"
                         onClick={() => removeFromWishlist(product.id)}
-                        className="absolute top-3 right-3 w-8 h-8 rounded-full bg-white/90 hover:bg-white text-stone-500 hover:text-red-600 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
+                        className="absolute top-2 right-2 sm:top-3 sm:right-3 w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-white/90 hover:bg-white text-stone-500 hover:text-red-600 flex items-center justify-center shadow-xs transition-colors cursor-pointer"
                         title="Remove from Wishlist"
+                        aria-label="Remove from Wishlist"
                       >
                         <svg
                           xmlns="http://www.w3.org/2000/svg"
-                          width="16"
-                          height="16"
+                          width="14"
+                          height="14"
                           viewBox="0 0 24 24"
                           fill="none"
                           stroke="currentColor"
                           strokeWidth="2"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className="w-3.5 h-3.5 sm:w-4 sm:h-4"
                         >
                           <line x1="18" y1="6" x2="6" y2="18"></line>
                           <line x1="6" y1="6" x2="18" y2="18"></line>
@@ -76,20 +90,20 @@ export default function WishlistPage() {
                     </div>
 
                     {/* Content Details */}
-                    <div className="p-4 space-y-2">
+                    <div className="p-2.5 sm:p-4 space-y-1 sm:space-y-2">
                       <Link
                         href={product.href}
-                        className="block font-serif text-[14.5px] text-[#302318] hover:text-[#8E531A] line-clamp-2 min-h-[40px] leading-snug"
+                        className="block font-serif text-xs sm:text-[14.5px] text-[#302318] hover:text-[#8E531A] line-clamp-2 min-h-[34px] sm:min-h-[40px] leading-snug"
                       >
                         {product.name}
                       </Link>
 
-                      <div className="flex items-center space-x-2">
-                        <span className="font-semibold text-[#281E15] text-[15px]">
+                      <div className="flex flex-wrap items-baseline gap-1 sm:gap-2 pt-0.5">
+                        <span className="font-semibold text-[#281E15] text-xs sm:text-[15px]">
                           ₹{product.price.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                         </span>
                         {product.originalPrice && (
-                          <span className="text-[#8F8175] line-through text-xs font-light">
+                          <span className="text-[#8F8175] line-through text-[10px] sm:text-xs font-light">
                             ₹{product.originalPrice.toLocaleString("en-IN", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </span>
                         )}
@@ -98,30 +112,35 @@ export default function WishlistPage() {
                   </div>
 
                   {/* Actions Footer */}
-                  <div className="p-4 pt-0">
+                  <div className="p-2.5 sm:p-4 pt-0 sm:pt-0">
                     <button
                       type="button"
-                      onClick={() => {
-                        addToCart(product, 1);
-                      }}
-                      className="w-full py-2.5 px-4 rounded-xl bg-[#1C2820] hover:bg-[#2B3B30] text-[#FAF5EB] text-xs font-sans font-medium tracking-wide flex items-center justify-center space-x-2 transition-colors cursor-pointer shadow-2xs"
+                      onClick={() => handleAddToCart(product)}
+                      className="w-full py-2 sm:py-2.5 px-2 sm:px-4 rounded-lg sm:rounded-xl bg-[#1C2820] hover:bg-[#2B3B30] text-[#FAF5EB] text-[11px] sm:text-xs font-sans font-medium tracking-wide flex items-center justify-center space-x-1 sm:space-x-2 transition-all cursor-pointer shadow-2xs active:scale-[0.98]"
                     >
-                      <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                      >
-                        <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
-                        <line x1="3" y1="6" x2="21" y2="6"></line>
-                        <path d="M16 10a4 4 0 0 1-8 0"></path>
-                      </svg>
-                      <span>Add to Cart</span>
+                      {addingId === product.id ? (
+                        <span>Added! ✓</span>
+                      ) : (
+                        <>
+                          <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="13"
+                            height="13"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            strokeWidth="2"
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            className="shrink-0"
+                          >
+                            <path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"></path>
+                            <line x1="3" y1="6" x2="21" y2="6"></line>
+                            <path d="M16 10a4 4 0 0 1-8 0"></path>
+                          </svg>
+                          <span className="truncate">Add to Cart</span>
+                        </>
+                      )}
                     </button>
                   </div>
                 </div>
@@ -129,14 +148,14 @@ export default function WishlistPage() {
             </div>
 
             {/* Bottom Actions */}
-            <div className="mt-12 text-center">
+            <div className="mt-10 sm:mt-12 text-center">
               <Button href="/shop" variant="secondary">
                 Continue Exploring Collection
               </Button>
             </div>
           </div>
         ) : (
-          <div className="bg-white/80 p-10 sm:p-14 rounded-2xl border border-[#DFCBB8]/70 text-center space-y-6 shadow-2xs max-w-lg mx-auto">
+          <div className="bg-white/80 p-8 sm:p-14 rounded-2xl border border-[#DFCBB8]/70 text-center space-y-6 shadow-2xs max-w-lg mx-auto">
             <div className="w-16 h-16 bg-[#FAF7F2] rounded-full flex items-center justify-center mx-auto text-[#B88746]">
               <svg
                 xmlns="http://www.w3.org/2000/svg"

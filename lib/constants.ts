@@ -108,7 +108,97 @@ export const BEST_SELLERS_PRODUCTS: Product[] = [
     reviewCount: 25,
     isNew: true,
   },
+  {
+    id: "kundan-silk-rakhi-trio-pack",
+    name: "Shivura Handcrafted Silk Thread Kundan Rakhi Set with Roli Chawal",
+    href: "/shop/kundan-silk-rakhi-pack",
+    imageSrc: "/images/om-rakhi.jpg",
+    originalPrice: 450.0,
+    price: 299.0,
+    rating: 5,
+    reviewCount: 8,
+    badge: "Bestseller",
+    isNew: true,
+  },
+  {
+    id: "shivura-handmade-terracotta-diya-set",
+    name: "Shivura Handmade Terracotta Diya for Diwali | Premium Clay Earthen Oil Lamp",
+    href: "/shop/terracotta-diya-set",
+    imageSrc: "/images/festive living.png",
+    originalPrice: 399.0,
+    price: 229.0,
+    rating: 5,
+    reviewCount: 28,
+    badge: "Bestseller",
+  },
+  {
+    id: "shivura-6r-acrylic-wall-photo-frame",
+    name: "Ferrari F1 Die-Cast Car Display Frame 6x8 Inch | 3D Formula 1 Racing Wall Art",
+    href: "/shop/shivura-6r-acrylic-wall-photo-frame",
+    imageSrc: "/images/frame-6r.jpg",
+    originalPrice: 999.0,
+    price: 799.0,
+    rating: 5,
+    reviewCount: 14,
+    badge: "Bestseller",
+  },
+  {
+    id: "shivura-a4-acrylic-wall-photo-frame",
+    name: "Ferrari Hot Wheels Diecast Car Display Frame with Car | 6x8 Inch F1 Wall Art by Shivura",
+    href: "/shop/shivura-a4-acrylic-wall-photo-frame",
+    imageSrc: "/images/frame-a4.jpg",
+    originalPrice: 999.0,
+    price: 799.0,
+    rating: 5,
+    reviewCount: 21,
+    badge: "Bestseller",
+  },
+  {
+    id: "shivura-premium-blue-om-rakhi",
+    name: "Shivura Premium Blue Om Rakhi for Brother with Dairy Milk",
+    href: "/shop/shivura-premium-blue-om-rakhi",
+    imageSrc: "/images/om-rakhi.jpg",
+    originalPrice: 450.0,
+    price: 399.0,
+    rating: 4,
+    reviewCount: 11,
+    badge: "Bestseller",
+  },
+  {
+    id: "shivura-brass-oil-lamp-diffuser",
+    name: "Handmade Ceramic Aroma Diffuser & Essential Oil Warm Lamp",
+    href: "/shop/terracotta-diya-set",
+    imageSrc: "/images/Product4.png",
+    originalPrice: 899.0,
+    price: 599.0,
+    rating: 5,
+    reviewCount: 32,
+    badge: "Bestseller",
+  },
+  {
+    id: "shivura-premium-mauli-kalava-raksha-thread",
+    name: "Shivura Premium Mauli Kalava Raksha Thread Set",
+    href: "/shop/shivura-premium-mauli-kalava",
+    imageSrc: "/images/mauli-kalava.jpg",
+    originalPrice: 499.0,
+    price: 349.0,
+    rating: 4,
+    reviewCount: 9,
+    badge: "Bestseller",
+  },
+  {
+    id: "artisan-copper-water-bottle-engraved",
+    name: "Handcrafted Pure Copper Water Bottle with Floral Engravings (1000ml)",
+    href: "/shop/copper-water-bottle",
+    imageSrc: "/images/Product1.png",
+    originalPrice: 1299.0,
+    price: 899.0,
+    rating: 5,
+    reviewCount: 41,
+    badge: "Bestseller",
+  },
 ];
+
 
 export const SHOP_SIDEBAR_CATEGORIES = [
   { id: "all", label: "All Products", slug: "all" },
@@ -343,7 +433,7 @@ export const ALL_PRODUCTS: Product[] = [
 
 export const NEW_ARRIVALS_PRODUCTS: Product[] = ALL_PRODUCTS.filter(
   (p) => p.isNew || p.badge === "New"
-).slice(0, 5);
+).slice(0, 12);
 
 
 

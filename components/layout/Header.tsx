@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -21,6 +21,10 @@ export function Header() {
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const userMenuRef = useRef<HTMLDivElement>(null);
   const leaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const handleCloseMobileNav = useCallback(() => {
+    setMobileNavOpen(false);
+  }, []);
 
   useEffect(() => {
     const handleClickOutside = (e: MouseEvent) => {
@@ -74,9 +78,11 @@ export function Header() {
               {/* Mobile Hamburger Button */}
               <button
                 type="button"
+                id="mobile-nav-toggle"
                 onClick={() => setMobileNavOpen(true)}
-                className="lg:hidden p-1 text-neutral-800 hover:text-neutral-900 focus:outline-none focus:ring-1 focus:ring-neutral-400 rounded-xs cursor-pointer"
+                className="lg:hidden flex items-center justify-center w-10 h-10 -ml-1 text-neutral-800 hover:text-neutral-900 active:bg-stone-200/60 focus:outline-none focus:ring-1 focus:ring-neutral-400 rounded-md cursor-pointer transition-colors"
                 aria-label="Open navigation menu"
+                aria-expanded={mobileNavOpen}
               >
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -397,7 +403,7 @@ export function Header() {
       {/* Mobile Nav Drawer */}
       <MobileNav
         isOpen={mobileNavOpen}
-        onClose={() => setMobileNavOpen(false)}
+        onClose={handleCloseMobileNav}
       />
     </>
   );

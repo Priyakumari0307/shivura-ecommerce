@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
@@ -18,11 +18,30 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
   const { wishlistCount, cartCount, showToast } = useShop();
   const { user, isAuthenticated, logout } = useAuth();
   const [expandedSubMenu, setExpandedSubMenu] = useState<string | null>("Shop");
+  const prevPathname = useRef(pathname);
 
-  // Close mobile drawer on route change
+  // Close mobile drawer ONLY when route actually changes
   useEffect(() => {
-    onClose();
+    if (prevPathname.current !== pathname) {
+      prevPathname.current = pathname;
+      onClose();
+    }
   }, [pathname, onClose]);
+
+  // Close mobile drawer on Escape key press
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        onClose();
+      }
+    };
+    if (isOpen) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [isOpen, onClose]);
 
   // Lock scroll when open
   useEffect(() => {
@@ -46,13 +65,13 @@ export function MobileNav({ isOpen, onClose }: MobileNavProps) {
     <div className="fixed inset-0 z-50 lg:hidden">
       {/* Backdrop */}
       <div
-        className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs transition-opacity duration-300"
+        className="fixed inset-0 bg-stone-900/60 backdrop-blur-xs transition-opacity duration-300 animate-in fade-in z-40"
         onClick={onClose}
         aria-hidden="true"
       />
 
       {/* Drawer Panel */}
-      <div className="fixed inset-y-0 left-0 w-full max-w-xs bg-[#FAF8F5] text-neutral-900 shadow-2xl flex flex-col justify-between p-6 overflow-y-auto border-r border-stone-300/80 transition-transform duration-300 ease-in-out">
+      <div className="fixed inset-y-0 left-0 z-50 w-full max-w-xs bg-[#FAF8F5] text-neutral-900 shadow-2xl flex flex-col justify-between p-6 overflow-y-auto border-r border-stone-300/80 transition-transform duration-300 ease-in-out animate-in slide-in-from-left">
         <div>
           {/* Header in Drawer with Enlarged Logo Image */}
           <div className="flex items-center justify-between pb-6 border-b border-stone-200">
